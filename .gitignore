@@ -1,0 +1,34 @@
+# Build output
+build/
+out/
+bin/
+obj/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# MSVC build artifacts
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.idb
+*.tlog
+*.log
+
+# Local logs / dumps the DLLs write to disk
+*_log.txt
+il2cpp_dump.cs
+dumper_log.txt
+esp_log.txt
+
+# OS junk
+Thumbs.db
+Desktop.ini
+*.DS_Store
