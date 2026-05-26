@@ -194,7 +194,7 @@ const InjectionTarget* PromptForTarget(const InjectionTarget* menuTarget, const 
 int main(int argc, char* argv[]) {
     const InjectionTarget menuTarget = {
         "Menu",
-        "esp_imgui.dll",
+        "cm_hax.dll",
         "Menu DLL injected. The overlay should initialize in game."
     };
     const InjectionTarget dumperTarget = {

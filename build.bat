@@ -2,28 +2,51 @@
 setlocal EnableExtensions
 
 set "ROOT=%~dp0"
-set "OUT_DIR=%ROOT%build"
-set "OBJ_DIR=%OUT_DIR%\obj"
+set "BUILD_ROOT=%ROOT%build"
+set "RELEASE_ROOT=%ROOT%release"
 set "SDK_NAME=CombatMaster_SDK_Full.hpp"
-set "TARGET=%~1"
-if not defined TARGET set "TARGET=all"
 
-if /I "%TARGET%"=="help" goto :usage
+rem ----------------------------------------------------------------
+rem Argument parsing.
+rem
+rem Usage:
+rem   build.bat                 -> all (Release)
+rem   build.bat <target>        -> single target (Release)
+rem   build.bat <target> debug  -> single target (Debug)
+rem   build.bat setup           -> clone third_party deps if missing
+rem   build.bat package         -> build Release + zip into release\
+rem   build.bat clean           -> wipe build\
+rem
+rem Targets: all | injector | dumper | menu | setup | package | clean
+rem ----------------------------------------------------------------
+
+set "TARGET=%~1"
+set "CONFIG_ARG=%~2"
+if not defined TARGET set "TARGET=all"
+if /I "%TARGET%"=="help"   goto :usage
 if /I "%TARGET%"=="--help" goto :usage
-if /I "%TARGET%"=="/?" goto :usage
+if /I "%TARGET%"=="/?"     goto :usage
+
+set "CONFIG=Release"
+if /I "%CONFIG_ARG%"=="debug"   set "CONFIG=Debug"
+if /I "%CONFIG_ARG%"=="release" set "CONFIG=Release"
+
+set "OUT_DIR=%BUILD_ROOT%\%CONFIG%"
+set "OBJ_ROOT=%OUT_DIR%\obj"
 
 echo ============================================================
-echo   Combat Master - Build
+echo   Cm-Hax  -  %CONFIG% build
 echo ============================================================
 echo.
 
-if /I "%TARGET%"=="clean" goto :clean
+if /I "%TARGET%"=="clean"   goto :clean
+if /I "%TARGET%"=="setup"   goto :setup
+if /I "%TARGET%"=="package" goto :package
 
 call :find_vs
 if errorlevel 1 exit /b 1
 
-echo [*] Using Visual Studio environment:
-echo     %FOUND_VS%
+echo [*] Visual Studio: %FOUND_VS%
 call "%FOUND_VS%" >nul
 if errorlevel 1 (
     echo [!] Failed to load the Visual Studio build environment.
@@ -31,41 +54,33 @@ if errorlevel 1 (
 )
 
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
-if not exist "%OBJ_DIR%" mkdir "%OBJ_DIR%"
+if not exist "%OBJ_ROOT%" mkdir "%OBJ_ROOT%"
 
-set "COMMON_FLAGS=/nologo /EHsc /std:c++17 /O2 /W3"
+rem --- Compiler flags per config ---
+if /I "%CONFIG%"=="Debug" (
+    set "COMMON_FLAGS=/nologo /EHsc /std:c++17 /Od /Zi /W3 /MDd /D_DEBUG"
+    set "LINK_FLAGS=/INCREMENTAL:NO /DEBUG"
+) else (
+    set "COMMON_FLAGS=/nologo /EHsc /std:c++17 /O2 /GL /W3 /MD /DNDEBUG"
+    set "LINK_FLAGS=/INCREMENTAL:NO /LTCG /OPT:REF /OPT:ICF"
+)
 
 if /I "%TARGET%"=="all" (
-    call :build_dumper
-    if errorlevel 1 exit /b 1
-    call :build_menu
-    if errorlevel 1 exit /b 1
-    call :build_injector
-    if errorlevel 1 exit /b 1
+    call :build_dumper   || exit /b 1
+    call :build_menu     || exit /b 1
+    call :build_injector || exit /b 1
     goto :done
 )
-
-if /I "%TARGET%"=="dumper" (
-    call :build_dumper
-    if errorlevel 1 exit /b 1
-    goto :done
-)
-
-if /I "%TARGET%"=="menu" (
-    call :build_menu
-    if errorlevel 1 exit /b 1
-    goto :done
-)
-
-if /I "%TARGET%"=="injector" (
-    call :build_injector
-    if errorlevel 1 exit /b 1
-    goto :done
-)
+if /I "%TARGET%"=="dumper"   ( call :build_dumper   || exit /b 1 & goto :done )
+if /I "%TARGET%"=="menu"     ( call :build_menu     || exit /b 1 & goto :done )
+if /I "%TARGET%"=="injector" ( call :build_injector || exit /b 1 & goto :done )
 
 echo [!] Unknown build target: %TARGET%
 goto :usage_error
 
+rem ================================================================
+rem find_vs: locate vcvars64.bat through vswhere or fallback dirs.
+rem ================================================================
 :find_vs
 set "FOUND_VS="
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -77,7 +92,6 @@ if exist "%VSWHERE%" (
         )
     )
 )
-
 if defined FOUND_VS exit /b 0
 
 for %%V in (2022 2019 2017) do (
@@ -94,50 +108,57 @@ for %%V in (2022 2019 2017) do (
 )
 
 echo [!] Visual Studio C++ build tools were not found.
-echo [!] Install Visual Studio 2022 or Build Tools with "Desktop development with C++".
+echo [!] Install Visual Studio 2022 (or Build Tools 2022) with the
+echo     "Desktop development with C++" workload, or run `build.bat setup` after installing.
 exit /b 1
 
+rem ================================================================
+rem prepare_obj: per-target obj subdir under OBJ_ROOT.
+rem ================================================================
 :prepare_obj
-set "THIS_OBJ_DIR=%OBJ_DIR%\%~1"
+set "THIS_OBJ_DIR=%OBJ_ROOT%\%~1"
 if not exist "%THIS_OBJ_DIR%" mkdir "%THIS_OBJ_DIR%"
 exit /b 0
 
+rem ================================================================
+rem build_dumper
+rem ================================================================
 :build_dumper
 call :prepare_obj dumper
 echo.
 echo [*] Building dumper.dll...
-cl %COMMON_FLAGS% /LD "%ROOT%dumper.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\dumper.dll" /link /INCREMENTAL:NO
-if errorlevel 1 (
-    echo [!] Failed to build dumper.dll
-    exit /b 1
-)
-echo [+] Built %OUT_DIR%\dumper.dll
+cl %COMMON_FLAGS% /LD "%ROOT%dumper.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\dumper.dll" /link %LINK_FLAGS%
+if errorlevel 1 ( echo [!] Failed to build dumper.dll & exit /b 1 )
+echo [+] %OUT_DIR%\dumper.dll
 exit /b 0
 
+rem ================================================================
+rem build_injector
+rem ================================================================
 :build_injector
 call :prepare_obj injector
 echo.
 echo [*] Building injector.exe...
-cl %COMMON_FLAGS% "%ROOT%injector.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\injector.exe" /link /INCREMENTAL:NO advapi32.lib
-if errorlevel 1 (
-    echo [!] Failed to build injector.exe
-    exit /b 1
-)
-echo [+] Built %OUT_DIR%\injector.exe
+cl %COMMON_FLAGS% "%ROOT%injector.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\injector.exe" /link %LINK_FLAGS% advapi32.lib
+if errorlevel 1 ( echo [!] Failed to build injector.exe & exit /b 1 )
+echo [+] %OUT_DIR%\injector.exe
 exit /b 0
 
+rem ================================================================
+rem resolve_minhook: figure out where MinHook lives.
+rem ================================================================
 :resolve_minhook
 set "MINHOOK_INCLUDE="
 set "MINHOOK_INPUTS="
 
-if exist "%ROOT%minhook\include\MinHook.h" (
-    set "MINHOOK_INCLUDE=%ROOT%minhook\include"
-    if exist "%ROOT%minhook\src\hook.c" if exist "%ROOT%minhook\src\buffer.c" if exist "%ROOT%minhook\src\trampoline.c" if exist "%ROOT%minhook\src\hde\hde64.c" (
-        set "MINHOOK_INPUTS=%ROOT%minhook\src\hook.c %ROOT%minhook\src\buffer.c %ROOT%minhook\src\trampoline.c %ROOT%minhook\src\hde\hde64.c"
+if exist "%ROOT%third_party\minhook\include\MinHook.h" (
+    set "MINHOOK_INCLUDE=%ROOT%third_party\minhook\include"
+    if exist "%ROOT%third_party\minhook\src\hook.c" if exist "%ROOT%third_party\minhook\src\buffer.c" if exist "%ROOT%third_party\minhook\src\trampoline.c" if exist "%ROOT%third_party\minhook\src\hde\hde64.c" (
+        set "MINHOOK_INPUTS=%ROOT%third_party\minhook\src\hook.c %ROOT%third_party\minhook\src\buffer.c %ROOT%third_party\minhook\src\trampoline.c %ROOT%third_party\minhook\src\hde\hde64.c"
         exit /b 0
     )
 
-    for %%L in ("%ROOT%minhook\lib\libMinHook.x64.lib" "%ROOT%minhook\lib\minhook.lib" "%ROOT%minhook\build\VC17\libMinHook.x64.lib" "%ROOT%minhook\build\VC16\libMinHook.x64.lib" "%ROOT%minhook\build\libMinHook.x64.lib") do (
+    for %%L in ("%ROOT%third_party\minhook\lib\libMinHook.x64.lib" "%ROOT%third_party\minhook\lib\minhook.lib" "%ROOT%third_party\minhook\build\VC17\libMinHook.x64.lib" "%ROOT%third_party\minhook\build\VC16\libMinHook.x64.lib" "%ROOT%third_party\minhook\build\VC15\libMinHook.x64.lib") do (
         if not defined MINHOOK_INPUTS if exist "%%~fL" set "MINHOOK_INPUTS=%%~fL"
     )
 )
@@ -153,75 +174,178 @@ if not defined MINHOOK_INPUTS if defined VCPKG_ROOT (
 
 if defined MINHOOK_INCLUDE if defined MINHOOK_INPUTS exit /b 0
 
-echo [!] MinHook was not found, so esp_imgui.dll cannot be built.
-echo [!] Put MinHook at "%ROOT%minhook" with include\MinHook.h and either src files or a x64 .lib.
-echo [!] You can still build the other targets with:
-echo     build.bat dumper
-echo     build.bat injector
+echo [!] MinHook not found.
+echo [!] Run `build.bat setup` to fetch dependencies, or place MinHook at
+echo     %ROOT%third_party\minhook\ with include\MinHook.h and src\.
 exit /b 1
 
+rem ================================================================
+rem build_menu (cm_hax.dll)
+rem ================================================================
 :build_menu
 call :resolve_minhook
 if errorlevel 1 exit /b 1
-call :prepare_obj menu
-echo.
-echo [*] Building esp_imgui.dll...
-cl %COMMON_FLAGS% /LD ^
-    /I"%ROOT%imgui" ^
-    /I"%ROOT%imgui\backends" ^
-    /I"%MINHOOK_INCLUDE%" ^
-    /I"%OUT_DIR%" ^
-    "%ROOT%esp.cpp" ^
-    "%ROOT%imgui\imgui.cpp" ^
-    "%ROOT%imgui\imgui_draw.cpp" ^
-    "%ROOT%imgui\imgui_tables.cpp" ^
-    "%ROOT%imgui\imgui_widgets.cpp" ^
-    "%ROOT%imgui\backends\imgui_impl_win32.cpp" ^
-    "%ROOT%imgui\backends\imgui_impl_dx11.cpp" ^
-    %MINHOOK_INPUTS% ^
-    /Fo"%THIS_OBJ_DIR%\\" ^
-    /Fe"%OUT_DIR%\esp_imgui.dll" ^
-    /link /INCREMENTAL:NO d3d11.lib dxgi.lib user32.lib gdi32.lib
-if errorlevel 1 (
-    echo [!] Failed to build esp_imgui.dll
+if not exist "%ROOT%third_party\imgui\imgui.h" (
+    echo [!] ImGui not found at %ROOT%third_party\imgui\.
+    echo [!] Run `build.bat setup` to fetch dependencies.
     exit /b 1
 )
-echo [+] Built %OUT_DIR%\esp_imgui.dll
+call :prepare_obj menu
+echo.
+echo [*] Building cm_hax.dll...
+cl %COMMON_FLAGS% /LD ^
+    /I"%ROOT%third_party\imgui" ^
+    /I"%ROOT%third_party\imgui\backends" ^
+    /I"%MINHOOK_INCLUDE%" ^
+    /I"%ROOT%src" ^
+    "%ROOT%src\dllmain.cpp" ^
+    "%ROOT%src\core\globals.cpp" ^
+    "%ROOT%src\core\config.cpp" ^
+    "%ROOT%src\core\logging.cpp" ^
+    "%ROOT%src\core\hooks.cpp" ^
+    "%ROOT%src\game\il2cpp.cpp" ^
+    "%ROOT%src\game\player.cpp" ^
+    "%ROOT%src\aimbot\aimbot.cpp" ^
+    "%ROOT%src\aimbot\hitbox.cpp" ^
+    "%ROOT%src\features\esp.cpp" ^
+    "%ROOT%src\features\combat.cpp" ^
+    "%ROOT%src\features\cosmetics.cpp" ^
+    "%ROOT%src\render\menu.cpp" ^
+    "%ROOT%src\render\menu_style.cpp" ^
+    "%ROOT%src\render\menu_widgets.cpp" ^
+    "%ROOT%src\render\esp_render.cpp" ^
+    "%ROOT%src\render\overlay.cpp" ^
+    "%ROOT%src\utils\math.cpp" ^
+    "%ROOT%src\utils\memory.cpp" ^
+    "%ROOT%src\utils\strings.cpp" ^
+    "%ROOT%src\utils\input.cpp" ^
+    "%ROOT%third_party\imgui\imgui.cpp" ^
+    "%ROOT%third_party\imgui\imgui_draw.cpp" ^
+    "%ROOT%third_party\imgui\imgui_tables.cpp" ^
+    "%ROOT%third_party\imgui\imgui_widgets.cpp" ^
+    "%ROOT%third_party\imgui\backends\imgui_impl_win32.cpp" ^
+    "%ROOT%third_party\imgui\backends\imgui_impl_dx11.cpp" ^
+    %MINHOOK_INPUTS% ^
+    /Fo"%THIS_OBJ_DIR%\\" ^
+    /Fe"%OUT_DIR%\cm_hax.dll" ^
+    /link %LINK_FLAGS% d3d11.lib dxgi.lib user32.lib gdi32.lib
+if errorlevel 1 ( echo [!] Failed to build cm_hax.dll & exit /b 1 )
+echo [+] %OUT_DIR%\cm_hax.dll
 exit /b 0
 
+rem ================================================================
+rem copy_sdk: keep the SDK header next to the build outputs.
+rem ================================================================
 :copy_sdk
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 if exist "%ROOT%%SDK_NAME%" (
     copy /y "%ROOT%%SDK_NAME%" "%OUT_DIR%\%SDK_NAME%" >nul
-    echo [+] Included %OUT_DIR%\%SDK_NAME%
-    exit /b 0
-)
-if exist "%OUT_DIR%\%SDK_NAME%" (
-    echo [+] Included %OUT_DIR%\%SDK_NAME%
+    echo [+] %OUT_DIR%\%SDK_NAME%
 )
 exit /b 0
 
+rem ================================================================
+rem setup: fetch third_party dependencies (idempotent).
+rem ================================================================
+:setup
+where git >nul 2>nul
+if errorlevel 1 (
+    echo [!] git is not on PATH. Install Git for Windows from https://git-scm.com.
+    exit /b 1
+)
+
+if not exist "%ROOT%third_party" mkdir "%ROOT%third_party"
+
+if not exist "%ROOT%third_party\imgui\imgui.h" (
+    echo [*] Cloning Dear ImGui (v1.91.6) into third_party\imgui...
+    git clone --depth 1 --branch v1.91.6 https://github.com/ocornut/imgui "%ROOT%third_party\imgui"
+    if errorlevel 1 ( echo [!] Clone failed. & exit /b 1 )
+) else (
+    echo [+] third_party\imgui already present
+)
+
+if not exist "%ROOT%third_party\minhook\include\MinHook.h" (
+    echo [*] Cloning MinHook (v1.3.3) into third_party\minhook...
+    git clone --depth 1 --branch v1.3.3 https://github.com/TsudaKageyu/minhook "%ROOT%third_party\minhook"
+    if errorlevel 1 ( echo [!] Clone failed. & exit /b 1 )
+) else (
+    echo [+] third_party\minhook already present
+)
+
+echo.
+echo [+] Dependencies ready. Next: run `build.bat` to build everything.
+exit /b 0
+
+rem ================================================================
+rem package: build Release and produce a portable zip in release\.
+rem ================================================================
+:package
+echo [*] Building Release artifacts...
+call "%~f0" all release
+if errorlevel 1 exit /b 1
+
+if not exist "%RELEASE_ROOT%" mkdir "%RELEASE_ROOT%"
+
+rem Build a date-stamped staging folder.
+for /f %%D in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set "STAMP=%%D"
+set "STAGE=%RELEASE_ROOT%\Cm-Hax_%STAMP%"
+if exist "%STAGE%" rmdir /s /q "%STAGE%"
+mkdir "%STAGE%"
+
+echo.
+echo [*] Staging into %STAGE%...
+copy /y "%BUILD_ROOT%\Release\cm_hax.dll"   "%STAGE%\cm_hax.dll"   >nul
+copy /y "%BUILD_ROOT%\Release\dumper.dll"   "%STAGE%\dumper.dll"   >nul
+copy /y "%BUILD_ROOT%\Release\injector.exe" "%STAGE%\injector.exe" >nul
+if exist "%ROOT%README.md"  copy /y "%ROOT%README.md"  "%STAGE%\README.md"  >nul
+if exist "%ROOT%LICENSE"    copy /y "%ROOT%LICENSE"    "%STAGE%\LICENSE"    >nul
+if exist "%ROOT%LICENSE.md" copy /y "%ROOT%LICENSE.md" "%STAGE%\LICENSE.md" >nul
+
+rem Drop a short usage note into the staged folder so the zip is self-explanatory.
+> "%STAGE%\USAGE.txt" (
+    echo Cm-Hax %STAMP% - portable build
+    echo.
+    echo Files:
+    echo   injector.exe   Run as Administrator. Pick 1 ^(menu^) or 2 ^(dumper^), or pass --menu / --dump.
+    echo   cm_hax.dll     Internal menu DLL. Loaded by injector option 1 / --menu.
+    echo   dumper.dll     IL2CPP metadata dumper. Loaded by injector option 2 / --dump.
+    echo.
+    echo Notes:
+    echo   - All three files must sit in the same folder.
+    echo   - Config is written to %%APPDATA%%\CmHax\cm_hax.cfg.
+    echo   - INSERT toggles the menu in-game; END unloads the DLL.
+    echo.
+    echo Disclaimer:
+    echo   Educational project. Loading these into a live online game violates
+    echo   Combat Master's Terms of Service and risks bans. See README.md.
+)
+
+set "ZIP_PATH=%RELEASE_ROOT%\Cm-Hax_%STAMP%.zip"
+if exist "%ZIP_PATH%" del /q "%ZIP_PATH%"
+echo [*] Creating %ZIP_PATH%...
+powershell -NoProfile -Command "Compress-Archive -Path '%STAGE%\*' -DestinationPath '%ZIP_PATH%' -Force"
+if errorlevel 1 ( echo [!] Compress-Archive failed. & exit /b 1 )
+
+echo.
+echo ============================================================
+echo   PACKAGE READY
+echo ============================================================
+echo   %ZIP_PATH%
+echo   %STAGE%\
+echo.
+exit /b 0
+
+rem ================================================================
+rem clean
+rem ================================================================
 :clean
-set "SDK_BACKUP="
-if exist "%OUT_DIR%\%SDK_NAME%" (
-    set "SDK_BACKUP=%TEMP%\cm_sdk_%RANDOM%_%SDK_NAME%"
-    copy /y "%OUT_DIR%\%SDK_NAME%" "%SDK_BACKUP%" >nul
+if exist "%BUILD_ROOT%" (
+    echo [*] Removing %BUILD_ROOT%...
+    rmdir /s /q "%BUILD_ROOT%" 2>nul
 )
-if exist "%OUT_DIR%" (
-    echo [*] Removing "%OUT_DIR%"...
-    rmdir /s /q "%OUT_DIR%"
+if exist "%BUILD_ROOT%" (
+    echo [!] Some files could not be removed ^(in use?^). Close any process holding the DLLs and retry.
 )
-if exist "%OUT_DIR%" (
-    echo [!] Clean left one or more locked files in "%OUT_DIR%".
-    echo [!] Close any process using the DLLs, then run build.bat clean again.
-)
-if defined SDK_BACKUP if exist "%SDK_BACKUP%" (
-    mkdir "%OUT_DIR%" >nul 2>nul
-    copy /y "%SDK_BACKUP%" "%OUT_DIR%\%SDK_NAME%" >nul
-    del /q "%SDK_BACKUP%" >nul 2>nul
-    echo [+] Preserved %OUT_DIR%\%SDK_NAME%
-)
-call :copy_sdk
 echo [+] Clean complete.
 exit /b 0
 
@@ -229,13 +353,10 @@ exit /b 0
 call :copy_sdk
 echo.
 echo ============================================================
-echo   BUILD COMPLETE
+echo   BUILD COMPLETE  -  %CONFIG%
 echo ============================================================
-echo   Output folder:
-echo     %OUT_DIR%
-echo.
-echo   Run:
-echo     %OUT_DIR%\injector.exe
+echo   Output:  %OUT_DIR%
+echo   Run:     %OUT_DIR%\injector.exe
 echo.
 exit /b 0
 
@@ -243,8 +364,27 @@ exit /b 0
 exit /b 1
 
 :usage
-echo Usage:
-echo   build.bat [all^|injector^|dumper^|menu^|clean]
 echo.
-echo Default target is "all".
+echo Cm-Hax build script
+echo.
+echo Usage:
+echo   build.bat [target] [debug^|release]
+echo.
+echo Targets:
+echo   all        Build dumper, menu DLL, and injector ^(default^)
+echo   menu       Only build cm_hax.dll
+echo   dumper     Only build dumper.dll
+echo   injector   Only build injector.exe
+echo   setup      Clone third_party dependencies ^(ImGui + MinHook^)
+echo   package    Build Release + bundle release\Cm-Hax_^<date^>.zip
+echo   clean      Remove build\
+echo.
+echo Configuration defaults to Release. Pass `debug` after the target for
+echo a Debug build (e.g. `build.bat menu debug`).
+echo.
+echo First-time use:
+echo   1) build.bat setup
+echo   2) build.bat
+echo   3) build\Release\injector.exe
+echo.
 exit /b 0

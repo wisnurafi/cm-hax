@@ -3,6 +3,11 @@ build/
 out/
 bin/
 obj/
+release/
+
+# Vendored deps fetched by `build.bat setup`
+third_party/imgui/
+third_party/minhook/
 
 # Visual Studio / VS Code
 .vs/

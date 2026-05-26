@@ -3,13 +3,35 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
-#define LOG_PATH "C:\\Users\\wisnu\\Desktop\\dumper_log.txt"
-#define OUT_PATH "C:\\Users\\wisnu\\Desktop\\il2cpp_dump.cs"
+// Resolved on first use. Both paths land on the current user's desktop, with
+// a fallback to the working directory when USERPROFILE isn't available.
+static char g_logPath[MAX_PATH] = {};
+static char g_outPath[MAX_PATH] = {};
+static bool g_pathsResolved     = false;
+
+static void ResolvePaths() {
+    if (g_pathsResolved) return;
+    g_pathsResolved = true;
+
+    char userProfile[MAX_PATH] = {};
+    DWORD n = GetEnvironmentVariableA("USERPROFILE", userProfile, MAX_PATH);
+    if (n > 0 && n < MAX_PATH) {
+        snprintf(g_logPath, sizeof(g_logPath), "%s\\Desktop\\dumper_log.txt", userProfile);
+        snprintf(g_outPath, sizeof(g_outPath), "%s\\Desktop\\il2cpp_dump.cs", userProfile);
+    } else {
+        snprintf(g_logPath, sizeof(g_logPath), "dumper_log.txt");
+        snprintf(g_outPath, sizeof(g_outPath), "il2cpp_dump.cs");
+    }
+}
+
+static const char* LogPath() { ResolvePaths(); return g_logPath; }
+static const char* OutPath() { ResolvePaths(); return g_outPath; }
 
 static FILE* g_log = NULL;
 void Log(const char* fmt, ...) {
-    if (!g_log) g_log = fopen(LOG_PATH, "w");
+    if (!g_log) g_log = fopen(LogPath(), "w");
     if (!g_log) return;
     va_list a; va_start(a, fmt);
     vfprintf(g_log, fmt, a); va_end(a);
@@ -286,7 +308,7 @@ void DoDump() {
     if (!assemblies || asmCount == 0) { Log("No assemblies!"); return; }
 
     // 4. Open output
-    FILE* out = fopen(OUT_PATH, "w");
+    FILE* out = fopen(OutPath(), "w");
     if (!out) { Log("Can't open output!"); return; }
     fprintf(out, "// IL2CPP Runtime Dump - Combat Master\n");
     fprintf(out, "// Exports: ApzldXylDWR=domain_get, ZxbKYsbhTwf=thread_attach\n");
@@ -422,7 +444,7 @@ void DoDump() {
     fprintf(out, "// ================================================================\n");
     fclose(out);
     Log("*** DUMPED %d classes, %d methods, %d fields ***", totalClasses, totalMethods, totalFields);
-    Log("*** Output: %s ***", OUT_PATH);
+    Log("*** Output: %s ***", OutPath());
 
     // Detach thread
     fn_thread_detach(thread);
