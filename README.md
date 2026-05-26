@@ -17,7 +17,6 @@ This repo exists as a learning resource for IL2CPP reverse engineering. See the
 | `esp.cpp` -> `esp_imgui.dll` | ImGui overlay (D3D11 `Present` hook via MinHook) showcasing ESP, aimbot smoothing, no-recoil, no-spread, and cosmetic byte patches. |
 | `CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
 | `il2cpp_dump.cs` | Sample dumper output: 21,079 classes / 141,505 methods / 95,267 fields. |
-| `Prompt That I Used.txt` | The prompt that drove the dumper design (struct layouts and obfuscated export map). |
 | `imgui/`, `minhook/` | Vendored dependencies for the menu DLL. |
 
 ## How the IL2CPP API gets resolved
