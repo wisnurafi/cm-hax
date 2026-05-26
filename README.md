@@ -54,7 +54,7 @@ src/
     memory.{cpp,h}            IsPlausiblePtr, BytePatch
     strings.{cpp,h}           Il2CppString -> UTF-8 helper
 ```
->>>>>>> 38cbc64 (Refactor into modular src/ tree, add one-command build, scrub personal paths)
+> 38cbc64 (Refactor into modular src/ tree, add one-command build, scrub personal paths)
 
 ## How the IL2CPP API gets resolved
 
