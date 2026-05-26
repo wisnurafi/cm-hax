@@ -16,10 +16,8 @@ This repo exists as a learning resource for IL2CPP reverse engineering. See the
 | `dumper.cpp` -> `dumper.dll` | Internal IL2CPP dumper. Walks domain -> assemblies -> images -> classes -> fields/methods and writes a C#-style file. |
 | `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` hook + ImGui overlay). ESP, aimbot, no-recoil, no-spread, cosmetic byte patches. |
 | `CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
-<<<<<<< HEAD
 | `il2cpp_dump.cs` | Sample dumper output: 21,079 classes / 141,505 methods / 95,267 fields. |
 | `imgui/`, `minhook/` | Vendored dependencies for the menu DLL. |
-=======
 | `Prompt That I Used.txt` | The prompt that drove the dumper design (struct layouts and obfuscated export map). |
 | `third_party/imgui`, `third_party/minhook` | Vendored dependencies for the menu DLL. |
 
