@@ -18,7 +18,6 @@ This repo exists as a learning resource for IL2CPP reverse engineering. See the
 | `CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
 | `il2cpp_dump.cs` | Sample dumper output: 21,079 classes / 141,505 methods / 95,267 fields. |
 | `imgui/`, `minhook/` | Vendored dependencies for the menu DLL. |
-| `Prompt That I Used.txt` | The prompt that drove the dumper design (struct layouts and obfuscated export map). |
 | `third_party/imgui`, `third_party/minhook` | Vendored dependencies for the menu DLL. |
 
 ## Source layout (`src/`)
@@ -74,8 +73,6 @@ at runtime via `GetProcAddress(hProject, "<mangled>")`. A few examples:
 | `il2cpp_class_from_name` | `etIgYqMGBTj` |
 | `il2cpp_class_get_method_from_name` | `BfmNBPOFdWH` |
 | `il2cpp_type_get_name` | `ySfCbKcrsLP` |
-
-The full mapping lives in `Prompt That I Used.txt`.
 
 ## Requirements
 
