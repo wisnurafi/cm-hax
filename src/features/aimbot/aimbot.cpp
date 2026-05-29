@@ -4,9 +4,9 @@
 #include <math.h>
 
 #include "aimbot.h"
-#include "../core/globals.h"
-#include "../utils/math.h"
-#include "../utils/input.h"
+#include "../../core/globals.h"
+#include "../../utils/math.h"
+#include "../../utils/input.h"
 
 namespace Aim {
 

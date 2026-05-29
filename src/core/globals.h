@@ -4,7 +4,7 @@
 #pragma once
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include "../game/player.h"
+#include "../il2cpp/player.h"
 #include "../utils/math.h"
 
 // User-facing settings + a few runtime status fields. Anything the user
@@ -39,6 +39,16 @@ struct CmState {
     // Combat
     bool  noRecoil = false;
     bool  noSpread = false;
+
+    // Triggerbot. Off-by-default with no key bound, so a fresh install can't
+    // fire on its own. The renderer fills triggerCrosshairOnTarget once per
+    // frame; the trigger state machine reads it from there.
+    bool  triggerEnabled        = false;
+    int   triggerHoldMs         = 25;     // LEFTDOWN -> LEFTUP duration
+    int   triggerRefireMs       = 80;     // gap between clicks
+    int   triggerPrecision      = 1;      // 0 = Precise, 1 = Balanced, 2 = Aggressive
+    int   triggerActivationMode = 1;      // 0 = Always, 1 = Hold
+    int   triggerActivationKey  = 0;      // VK; 0 = unbound
 
     // Cosmetics
     bool  unlockAll = false;

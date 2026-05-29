@@ -11,10 +11,10 @@
 #include "../core/globals.h"
 #include "../core/hooks.h"
 #include "../core/logging.h"
-#include "../game/il2cpp.h"
-#include "../game/player.h"
-#include "../game/offsets.h"
-#include "../game/sdk.h"
+#include "../il2cpp/il2cpp.h"
+#include "../il2cpp/player.h"
+#include "../il2cpp/offsets.h"
+#include "../il2cpp/sdk.h"
 #include "../utils/math.h"
 #include "../utils/memory.h"
 
@@ -44,7 +44,11 @@ DWORD WINAPI DataThread(LPVOID /*lpReserved*/) {
             }
         }
 
-        if (!g_state.espEnabled
+        // Collect data whenever any consumer needs it. Each consumer's own
+        // toggle still gates whether it acts on the data; this just keeps
+        // the snapshot fresh so triggerbot/aim can run with ESP visuals off.
+        bool anyConsumer = g_state.espEnabled || g_state.aimbotEnabled || g_state.triggerEnabled;
+        if (!anyConsumer
             || !g_state.staticFields
             || !IL2CPP::fn_get_main_camera
             || !IL2CPP::fn_get_position

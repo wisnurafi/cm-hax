@@ -6,12 +6,13 @@
 
 #include "esp_render.h"
 #include "menu_style.h"
-#include "../../third_party/imgui/imgui.h"
+#include "imgui.h"
 #include "../core/globals.h"
-#include "../game/il2cpp.h"
-#include "../game/player.h"
-#include "../aimbot/aimbot.h"
-#include "../aimbot/hitbox.h"
+#include "../il2cpp/il2cpp.h"
+#include "../il2cpp/player.h"
+#include "../features/aimbot/aimbot.h"
+#include "../features/aimbot/hitbox.h"
+#include "../features/triggerbot/triggerbot.h"
 #include "../utils/math.h"
 #include "../utils/memory.h"
 
@@ -102,9 +103,32 @@ static void DrawVerticalBar(ImDrawList* drawList, float x, float y, float h, flo
     drawList->AddRectFilled(ImVec2(x, y + h - fillH), ImVec2(x + w, y + h), fillColor, 1.0f);
 }
 
+// Map the user-facing trigger precision preset (Precise / Balanced /
+// Aggressive) onto a screen-space padding for the bbox-contains test.
+// Negative shrinks the detection box; positive grows it. Numbers were
+// picked so Balanced matches the visible bbox 1:1, Precise demands a
+// solid hit on the silhouette, and Aggressive forgives near-miss edges.
+static float TriggerPaddingPx(int precision) {
+    switch (precision) {
+        case 0:  return -6.0f;  // Precise
+        case 1:  return  0.0f;  // Balanced
+        case 2:  return  8.0f;  // Aggressive
+        default: return  0.0f;
+    }
+}
+
 // ---- main draw ------------------------------------------------------------
 void Draw() {
-    if (!g_state.espEnabled) return;
+    // Same any-consumer rule as the data thread: render/loop when ESP, aim,
+    // or trigger is enabled. Individual visual elements (box, names, hp,
+    // skeleton, snapline, fov circle) each gate themselves with their own
+    // toggle, so toggling triggerbot on alone won't draw ESP visuals.
+    bool anyConsumer = g_state.espEnabled || g_state.aimbotEnabled || g_state.triggerEnabled;
+    if (!anyConsumer) {
+        Aim::ResetState();
+        Trigger::OnFrame(false);
+        return;
+    }
     IL2CPP::EnsurePresentThreadAttached();
 
     Runtime::SharedESPData localData;
@@ -126,6 +150,13 @@ void Draw() {
     float lockedTargetX = 0.0f, lockedTargetY = 0.0f;
     bool foundLockedTarget = false;
     bool aimKeyDown = Aim::IsActivationActive();
+
+    // Trigger detection. We don't care about distance/priority - any live
+    // enemy whose padded bbox covers the screen center is a valid target.
+    // Visible-check is honored when the user has it enabled.
+    bool   triggerOnTarget = false;
+    float  cx = (float)screenW * 0.5f;
+    float  cy = (float)screenH * 0.5f;
 
     for (int i = 0; i < localData.playerCount; i++) {
         PlayerData& p = localData.players[i];
@@ -159,11 +190,29 @@ void Draw() {
             ? (p.isReal ? ColorVecToU32(g_state.colEnemy) : ColorVecToU32(g_state.colBot))
             : ColorVecToU32(g_state.colOccluded);
 
-        if (g_state.espBox) {
+        if (g_state.espEnabled && g_state.espBox) {
             DrawCornerBox(drawList, boxX, boxY, boxW, boxH, accentColor);
         }
 
-        if (g_state.espSkeleton) {
+        // Triggerbot detection (cheap rectangle-contains test).
+        // We honor the same gating that ESP does: skip team-mates (already
+        // filtered upstream), skip dead (hp<=0 already gated), and require
+        // visibility when visibleCheck is on. Padding is derived from the
+        // user-facing precision preset.
+        if (g_state.triggerEnabled && !triggerOnTarget) {
+            if (!g_state.visibleCheck || p.visible) {
+                float pad = TriggerPaddingPx(g_state.triggerPrecision);
+                float tx0 = boxX - pad;
+                float ty0 = boxY - pad;
+                float tx1 = boxX + boxW + pad;
+                float ty1 = boxY + boxH + pad;
+                if (cx >= tx0 && cx <= tx1 && cy >= ty0 && cy <= ty1) {
+                    triggerOnTarget = true;
+                }
+            }
+        }
+
+        if (g_state.espEnabled && g_state.espSkeleton) {
             ImU32 boneColor = p.visible ? ColorVecToU32(g_state.colSkeleton) : ColorVecToU32(g_state.colOccluded);
             static const int kBoneEdges[][2] = {
                 { BONE_HEAD,  BONE_NECK  },
@@ -195,7 +244,7 @@ void Draw() {
             }
         }
 
-        if (g_state.espNames && p.name[0]) {
+        if (g_state.espEnabled && g_state.espNames && p.name[0]) {
             ImVec2 textSize = ImGui::CalcTextSize(p.name);
             float textX = boxX + (boxW - textSize.x) * 0.5f;
             float textY = boxY - textSize.y - 5.0f;
@@ -204,7 +253,7 @@ void Draw() {
             DrawShadowText(drawList, ImVec2(textX, textY), nameColor, p.name);
         }
 
-        if (g_state.espHealth && p.hp > 0) {
+        if (g_state.espEnabled && g_state.espHealth && p.hp > 0) {
             float hpPct = p.hp / 100.0f;
             if (hpPct > 1.0f) hpPct = 1.0f;
             ImU32 hpColor = hpPct > 0.55f ? ColorVecToU32(g_state.colHpHigh)
@@ -213,20 +262,20 @@ void Draw() {
             DrawVerticalBar(drawList, boxX - 7.0f, boxY, boxH, hpPct, hpColor);
         }
 
-        if (g_state.espArmor && p.armor > 0) {
+        if (g_state.espEnabled && g_state.espArmor && p.armor > 0) {
             float arPct = p.armor / 100.0f;
             if (arPct > 1.0f) arPct = 1.0f;
             DrawVerticalBar(drawList, boxX + boxW + 4.0f, boxY, boxH, arPct, ColorVecToU32(g_state.colArmor));
         }
 
-        if (g_state.espLines) {
+        if (g_state.espEnabled && g_state.espLines) {
             ImU32 lineColor = p.visible ? ColorVecToU32(g_state.colSnapline) : ColorVecToU32(g_state.colOccluded);
             drawList->AddLine(ImVec2((float)screenW * 0.5f, (float)screenH - 2.0f),
                               ImVec2(boxX + boxW * 0.5f, boxY + boxH), lineColor, 1.0f);
         }
 
         float labelY = boxY + boxH + 4.0f;
-        if (g_state.espDistance && p.distance > 0.01f) {
+        if (g_state.espEnabled && g_state.espDistance && p.distance > 0.01f) {
             char distanceText[32];
             snprintf(distanceText, sizeof(distanceText), "%.0fm", p.distance);
             ImVec2 textSize = ImGui::CalcTextSize(distanceText);
@@ -294,6 +343,11 @@ void Draw() {
     } else {
         Aim::ResetState();
     }
+
+    // Drive the trigger state machine once per frame regardless of whether
+    // we found a target - it needs the false case to release any in-flight
+    // click and to reset its refire timer.
+    Trigger::OnFrame(triggerOnTarget);
 
     g_state.dbg_pR  = localData.pR;
     g_state.dbg_pHP = localData.pHP;

@@ -4,7 +4,7 @@
 #include <windows.h>
 #include "strings.h"
 #include "memory.h"
-#include "../game/sdk.h"
+#include "../il2cpp/sdk.h"
 
 bool CopyIl2CppStringUtf8(void* stringObj, char* out, size_t outSize) {
     if (!out || outSize == 0) return false;

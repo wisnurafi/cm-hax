@@ -12,11 +12,12 @@ This repo exists as a learning resource for IL2CPP reverse engineering. See the
 
 | Path | Description |
 |------|-------------|
-| `injector.cpp` -> `injector.exe` | Waits for `CombatMaster.exe`, raises `SeDebugPrivilege`, classic `CreateRemoteThread` + `LoadLibraryA` injection. |
-| `dumper.cpp` -> `dumper.dll` | Internal IL2CPP dumper. Walks domain -> assemblies -> images -> classes -> fields/methods and writes a C#-style file. |
-| `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` hook + ImGui overlay). ESP, aimbot, no-recoil, no-spread, cosmetic byte patches. |
-| `CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
-| `il2cpp_dump.cs` (gitignored) | Latest dumper output: 21,079 classes / 141,505 methods / 95,267 fields. Re-inject `dumper.dll` to refresh. |
+| `injector/main.cpp` -> `injector.exe` | Waits for `CombatMaster.exe`, raises `SeDebugPrivilege`, classic `CreateRemoteThread` + `LoadLibraryA` injection. |
+| `dumper/main.cpp` -> `dumper.dll` | Internal IL2CPP dumper. Walks domain -> assemblies -> images -> classes -> fields/methods and writes a C#-style file. |
+| `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` hook + ImGui overlay). ESP, aimbot, triggerbot, no-recoil, no-spread, cosmetic byte patches. |
+| `reference/CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
+| `dumps/` (gitignored) | Runtime output from `dumper.dll`. Re-inject to refresh after a game patch. |
+| `docs/` | Architecture overview and offset-update workflow. |
 | `third_party/imgui`, `third_party/minhook` | Vendored dependencies for the menu DLL (fetched by `build.bat setup`). |
 
 ## Source layout (`src/`)
@@ -28,16 +29,18 @@ src/
     globals.{cpp,h}           CmState (toggles, colors, runtime status)
     config.{cpp,h}            JSON-style save/load + AppData migration
     hooks.{cpp,h}             D3D11 Present/ResizeBuffers, WndProc, init/unload
-    logging.{cpp,h}           lightweight desktop-file logger
-  game/
+    logging.{cpp,h}           robust multi-fallback file logger
+  il2cpp/
     sdk.h                     IL2CPP runtime structs (Object/List/Array/String)
     offsets.h                 PlayerRoot/PlayerHealth/MobView field offsets
     il2cpp.{cpp,h}            export resolution + Unity/Battle method lookup
     player.{cpp,h}            PlayerData + safe IL2CPP wrappers + bone capture
-  aimbot/
-    hitbox.{cpp,h}            HitboxSpec table + honest resolver (no remap)
-    aimbot.{cpp,h}            mouse smoothing/stickiness + sticky-lock state
   features/
+    aimbot/
+      aimbot.{cpp,h}          mouse smoothing/stickiness + sticky-lock state
+      hitbox.{cpp,h}          HitboxSpec table + honest resolver (no remap)
+    triggerbot/
+      triggerbot.{cpp,h}      non-blocking LMB click state machine
     esp.{cpp,h}               60Hz collector thread (PlayerRoot list -> shared)
     combat.{cpp,h}            no-recoil / no-spread per-frame patcher
     cosmetics.{cpp,h}         Is*Available byte patches + cloud save
@@ -51,6 +54,7 @@ src/
     math.{cpp,h}              Vector3, Matrix4x4, ClampFloat, Distance3D
     memory.{cpp,h}            IsPlausiblePtr, BytePatch
     strings.{cpp,h}           Il2CppString -> UTF-8 helper
+    input.{cpp,h}             VK helpers, keybind polling
 ```
 
 ## How the IL2CPP API gets resolved
@@ -72,8 +76,8 @@ at runtime via `GetProcAddress(hProject, "<mangled>")`. A few examples:
 | `il2cpp_class_get_method_from_name` | `BfmNBPOFdWH` |
 | `il2cpp_type_get_name` | `ySfCbKcrsLP` |
 
-The full mapping lives in `dumper.cpp` (search for `RESOLVE(` in the
-`ResolveAPIs` function) and in `src/game/il2cpp.cpp::ResolveAll`.
+The full mapping lives in `dumper/main.cpp` (search for `RESOLVE(` in the
+`ResolveAPIs` function) and in `src/il2cpp/il2cpp.cpp::ResolveAll`.
 
 ## Requirements
 

@@ -127,7 +127,7 @@ rem ================================================================
 call :prepare_obj dumper
 echo.
 echo [*] Building dumper.dll...
-cl %COMMON_FLAGS% /LD "%ROOT%dumper.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\dumper.dll" /link %LINK_FLAGS%
+cl %COMMON_FLAGS% /LD "%ROOT%dumper\main.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\dumper.dll" /link %LINK_FLAGS%
 if errorlevel 1 ( echo [!] Failed to build dumper.dll & exit /b 1 )
 echo [+] %OUT_DIR%\dumper.dll
 exit /b 0
@@ -139,7 +139,7 @@ rem ================================================================
 call :prepare_obj injector
 echo.
 echo [*] Building injector.exe...
-cl %COMMON_FLAGS% "%ROOT%injector.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\injector.exe" /link %LINK_FLAGS% advapi32.lib
+cl %COMMON_FLAGS% "%ROOT%injector\main.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\injector.exe" /link %LINK_FLAGS% advapi32.lib
 if errorlevel 1 ( echo [!] Failed to build injector.exe & exit /b 1 )
 echo [+] %OUT_DIR%\injector.exe
 exit /b 0
@@ -203,10 +203,11 @@ cl %COMMON_FLAGS% /LD ^
     "%ROOT%src\core\config.cpp" ^
     "%ROOT%src\core\logging.cpp" ^
     "%ROOT%src\core\hooks.cpp" ^
-    "%ROOT%src\game\il2cpp.cpp" ^
-    "%ROOT%src\game\player.cpp" ^
-    "%ROOT%src\aimbot\aimbot.cpp" ^
-    "%ROOT%src\aimbot\hitbox.cpp" ^
+    "%ROOT%src\il2cpp\il2cpp.cpp" ^
+    "%ROOT%src\il2cpp\player.cpp" ^
+    "%ROOT%src\features\aimbot\aimbot.cpp" ^
+    "%ROOT%src\features\aimbot\hitbox.cpp" ^
+    "%ROOT%src\features\triggerbot\triggerbot.cpp" ^
     "%ROOT%src\features\esp.cpp" ^
     "%ROOT%src\features\combat.cpp" ^
     "%ROOT%src\features\cosmetics.cpp" ^
@@ -238,8 +239,8 @@ rem copy_sdk: keep the SDK header next to the build outputs.
 rem ================================================================
 :copy_sdk
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
-if exist "%ROOT%%SDK_NAME%" (
-    copy /y "%ROOT%%SDK_NAME%" "%OUT_DIR%\%SDK_NAME%" >nul
+if exist "%ROOT%reference\%SDK_NAME%" (
+    copy /y "%ROOT%reference\%SDK_NAME%" "%OUT_DIR%\%SDK_NAME%" >nul
     echo [+] %OUT_DIR%\%SDK_NAME%
 )
 exit /b 0

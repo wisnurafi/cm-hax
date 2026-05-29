@@ -1,4 +1,4 @@
-// game/il2cpp.h
+// il2cpp/il2cpp.h
 // IL2CPP API resolution + cached function pointers / methodInfo blobs.
 // Symbol exports are renamed in Combat Master (e.g. il2cpp_domain_get -> ApzldXylDWR).
 // All runtime calls go through the typedefs declared here.

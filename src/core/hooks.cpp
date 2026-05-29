@@ -11,13 +11,13 @@
 #include "config.h"
 #include "logging.h"
 
-#include "../../third_party/imgui/imgui.h"
-#include "../../third_party/imgui/backends/imgui_impl_win32.h"
-#include "../../third_party/imgui/backends/imgui_impl_dx11.h"
-#include "../../third_party/minhook/include/MinHook.h"
+#include "imgui.h"
+#include "backends/imgui_impl_win32.h"
+#include "backends/imgui_impl_dx11.h"
+#include "MinHook.h"
 
-#include "../game/il2cpp.h"
-#include "../game/sdk.h"
+#include "../il2cpp/il2cpp.h"
+#include "../il2cpp/sdk.h"
 #include "../utils/memory.h"
 
 #include "../features/esp.h"

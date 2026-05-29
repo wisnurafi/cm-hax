@@ -29,7 +29,7 @@ third_party/minhook/
 
 # Local logs / dumps the DLLs write to disk
 *_log.txt
-il2cpp_dump.cs
+dumps/
 dumper_log.txt
 esp_log.txt
 

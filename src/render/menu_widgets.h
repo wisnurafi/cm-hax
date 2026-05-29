@@ -3,7 +3,7 @@
 // All widgets use the central palette in MenuStyle and are stateless from the
 // caller's perspective; per-widget animation state is keyed on the label.
 #pragma once
-#include "../../third_party/imgui/imgui.h"
+#include "imgui.h"
 
 namespace Widgets {
     // Section header with an accent square + label and a thin underline.
@@ -27,7 +27,7 @@ namespace Widgets {
         GLYPH_AIM,
         GLYPH_COMBAT,
         GLYPH_COSMETICS,
-        GLYPH_DEBUG,
+        GLYPH_MISC,
     };
     bool SidebarButton(const char* label, int glyph, bool active);
 

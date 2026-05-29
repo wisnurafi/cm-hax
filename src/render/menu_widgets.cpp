@@ -250,13 +250,12 @@ static void DrawSidebarGlyph(ImDrawList* dl, int glyph, ImVec2 origin, float siz
             dl->AddLine(ImVec2(cx - r * 0.55f, cy - r * 0.30f),
                         ImVec2(cx + r * 0.55f, cy - r * 0.30f), col, th);
         } break;
-        case GLYPH_DEBUG: { // 2x2 grid
-            float s = r * 0.55f;
-            float g = 1.6f;
-            dl->AddRect(ImVec2(cx - s, cy - s), ImVec2(cx - g, cy - g), col, 1.0f, 0, th);
-            dl->AddRect(ImVec2(cx + g, cy - s), ImVec2(cx + s, cy - g), col, 1.0f, 0, th);
-            dl->AddRect(ImVec2(cx - s, cy + g), ImVec2(cx - g, cy + s), col, 1.0f, 0, th);
-            dl->AddRect(ImVec2(cx + g, cy + g), ImVec2(cx + s, cy + s), col, 1.0f, 0, th);
+        case GLYPH_MISC: { // three horizontal dots (kebab)
+            float r = size * 0.10f;
+            float gap = size * 0.18f;
+            dl->AddCircleFilled(ImVec2(cx - gap, cy), r, col);
+            dl->AddCircleFilled(ImVec2(cx,       cy), r, col);
+            dl->AddCircleFilled(ImVec2(cx + gap, cy), r, col);
         } break;
     }
 }
