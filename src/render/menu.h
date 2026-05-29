@@ -8,7 +8,7 @@ namespace Menu {
         TAB_AIM,
         TAB_COMBAT,
         TAB_COSMETICS,
-        TAB_DEBUG,
+        TAB_MISC,
         TAB_COUNT
     };
 

@@ -1,7 +1,7 @@
 // render/menu_style.h
 // Menu palette + ImGui style + font loading.
 #pragma once
-#include "../../third_party/imgui/imgui.h"
+#include "imgui.h"
 
 namespace MenuStyle {
     extern ImFont* g_fontBody;

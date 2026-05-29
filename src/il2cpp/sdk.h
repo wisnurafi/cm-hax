@@ -1,4 +1,4 @@
-// game/sdk.h
+// il2cpp/sdk.h
 // Minimal IL2CPP runtime structs used across the project.
 // Mirrors Unity 6000.0.60. Only the fields we touch are listed.
 #pragma once

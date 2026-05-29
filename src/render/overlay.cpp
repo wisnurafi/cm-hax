@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "overlay.h"
 #include "menu_style.h"
-#include "../../third_party/imgui/imgui.h"
+#include "imgui.h"
 #include "../core/globals.h"
 #include "../utils/math.h"
 

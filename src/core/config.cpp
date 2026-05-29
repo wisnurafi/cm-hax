@@ -9,7 +9,7 @@
 #include "config.h"
 #include "globals.h"
 #include "logging.h"
-#include "../aimbot/hitbox.h"
+#include "../features/aimbot/hitbox.h"
 
 namespace Config {
 
@@ -51,6 +51,14 @@ static CfgEntry g_entries[] = {
     // Combat
     { "combat.noRecoil",   CFG_BOOL,  &g_state.noRecoil },
     { "combat.noSpread",   CFG_BOOL,  &g_state.noSpread },
+
+    // Triggerbot
+    { "trigger.enabled",          CFG_BOOL,  &g_state.triggerEnabled },
+    { "trigger.holdMs",           CFG_INT,   &g_state.triggerHoldMs },
+    { "trigger.refireMs",         CFG_INT,   &g_state.triggerRefireMs },
+    { "trigger.precision",        CFG_INT,   &g_state.triggerPrecision },
+    { "trigger.activationMode",   CFG_INT,   &g_state.triggerActivationMode },
+    { "trigger.activationKey",    CFG_INT,   &g_state.triggerActivationKey },
 
     // Colors
     { "col.enemy",         CFG_COL4,  g_state.colEnemy },
@@ -298,6 +306,16 @@ void Load() {
     if (g_state.activeTab < 0 || g_state.activeTab > 4) g_state.activeTab = 0;
     if (g_state.aimActivationMode < 0 || g_state.aimActivationMode > 1) g_state.aimActivationMode = 1;
     if (g_state.aimActivationKey  < 0 || g_state.aimActivationKey  > 255) g_state.aimActivationKey = 0;
+
+    // Trigger clamps mirror the slider ranges.
+    if (g_state.triggerHoldMs        < 5)    g_state.triggerHoldMs = 5;
+    if (g_state.triggerHoldMs        > 200)  g_state.triggerHoldMs = 200;
+    if (g_state.triggerRefireMs      < 10)   g_state.triggerRefireMs = 10;
+    if (g_state.triggerRefireMs      > 1000) g_state.triggerRefireMs = 1000;
+    if (g_state.triggerPrecision     < 0)    g_state.triggerPrecision = 0;
+    if (g_state.triggerPrecision     > 2)    g_state.triggerPrecision = 2;
+    if (g_state.triggerActivationMode < 0 || g_state.triggerActivationMode > 1) g_state.triggerActivationMode = 1;
+    if (g_state.triggerActivationKey  < 0 || g_state.triggerActivationKey  > 255) g_state.triggerActivationKey = 0;
 
     // Strip any hitbox bits we no longer expose (older configs may have them).
     g_state.aimbotHitboxMask &= HitboxValidMask();

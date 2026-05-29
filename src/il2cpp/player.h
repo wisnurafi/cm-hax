@@ -1,4 +1,4 @@
-// game/player.h
+// il2cpp/player.h
 // Per-player data captured by the ESP collector and consumed by the renderer
 // and aimbot. Also holds bone projection helpers.
 #pragma once

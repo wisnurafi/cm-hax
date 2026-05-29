@@ -1,4 +1,4 @@
-// game/offsets.h
+// il2cpp/offsets.h
 // Game-specific field offsets. Tied to a specific Project.dll build.
 // Re-dump and diff with Il2CppDumper after every game patch.
 #pragma once

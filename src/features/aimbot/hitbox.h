@@ -1,7 +1,7 @@
 // aimbot/hitbox.h
 // Hitbox selector / resolver. Pure logic, no rendering or input.
 #pragma once
-#include "../game/player.h"
+#include "../../il2cpp/player.h"
 
 enum HitboxFlag {
     HITBOX_HEAD    = 1 << 0,

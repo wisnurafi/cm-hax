@@ -9,13 +9,14 @@
 #include "menu.h"
 #include "menu_style.h"
 #include "menu_widgets.h"
-#include "../../third_party/imgui/imgui.h"
+#include "imgui.h"
 #include "../core/globals.h"
 #include "../core/config.h"
 #include "../core/logging.h"
-#include "../game/il2cpp.h"
-#include "../aimbot/aimbot.h"
-#include "../aimbot/hitbox.h"
+#include "../il2cpp/il2cpp.h"
+#include "../features/aimbot/aimbot.h"
+#include "../features/aimbot/hitbox.h"
+#include "../features/triggerbot/triggerbot.h"
 #include "../features/cosmetics.h"
 #include "../utils/math.h"
 #include "../utils/input.h"
@@ -38,7 +39,7 @@ static const TabSpec g_tabs[TAB_COUNT] = {
     { "Aim",       "Targeting",     Widgets::GLYPH_AIM },
     { "Combat",    "Recoil/spread", Widgets::GLYPH_COMBAT },
     { "Cosmetics", "Unlocks/save",  Widgets::GLYPH_COSMETICS },
-    { "Debug",     "Diagnostics",   Widgets::GLYPH_DEBUG },
+    { "Misc",      "Tools & info",  Widgets::GLYPH_MISC },
 };
 
 // =====================================================================
@@ -63,7 +64,6 @@ static void RenderTabESP() {
     Widgets::SectionHeader("Filters");
     Widgets::Toggle("Team Check",    &g_state.teamCheck);
     Widgets::Toggle("Visible Check", &g_state.visibleCheck);
-    Widgets::Toggle("FPS Overlay",   &g_state.showFpsOverlay);
 
     Widgets::SectionHeader("Colors");
     ImGuiColorEditFlags cf = ImGuiColorEditFlags_AlphaBar
@@ -163,6 +163,96 @@ static void RenderTabAim() {
     ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
     ImGui::TextWrapped("Targets are scanned by priority (head > chest > stomach > legs).");
     ImGui::PopStyleColor();
+
+    // ---- Triggerbot ------------------------------------------------------
+    Widgets::SectionHeader("Triggerbot");
+    Widgets::Toggle("Enable", &g_state.triggerEnabled);
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kSubtleText, "Precision");
+    ImGui::PopFont();
+    {
+        // Radio-style precision pills. Pill widget is bitmask-based so we
+        // give each its own single-bit pseudo-mask and translate clicks
+        // into a discrete enum write.
+        static const Widgets::PillItem kPrecise[]    = { { 1, "Precise"    } };
+        static const Widgets::PillItem kBalanced[]   = { { 1, "Balanced"   } };
+        static const Widgets::PillItem kAggressive[] = { { 1, "Aggressive" } };
+
+        int preciseMask    = (g_state.triggerPrecision == 0) ? 1 : 0;
+        int balancedMask   = (g_state.triggerPrecision == 1) ? 1 : 0;
+        int aggressiveMask = (g_state.triggerPrecision == 2) ? 1 : 0;
+
+        if (Widgets::PillBitmaskRow("trig_prec_p", &preciseMask, kPrecise, 1)) {
+            g_state.triggerPrecision = 0;
+        }
+        ImGui::SameLine(0.0f, 8.0f);
+        if (Widgets::PillBitmaskRow("trig_prec_b", &balancedMask, kBalanced, 1)) {
+            g_state.triggerPrecision = 1;
+        }
+        ImGui::SameLine(0.0f, 8.0f);
+        if (Widgets::PillBitmaskRow("trig_prec_a", &aggressiveMask, kAggressive, 1)) {
+            g_state.triggerPrecision = 2;
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        ImGui::PushFont(g_fontSmall);
+        const char* hint = "";
+        switch (g_state.triggerPrecision) {
+            case 0: hint = "Crosshair must sit solidly on the enemy. Best for snipers / single shot."; break;
+            case 1: hint = "Detection matches the visible box. Good default for most weapons."; break;
+            case 2: hint = "Fires near the enemy outline. Forgiving for SMGs / shotguns."; break;
+        }
+        ImGui::TextColored(kMutedText, "%s", hint);
+        ImGui::PopFont();
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderInt("##trig_hold",   &g_state.triggerHoldMs,    5, 200,  "Hold     %d ms");
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderInt("##trig_refire", &g_state.triggerRefireMs,  10, 1000, "Refire   %d ms");
+
+    Widgets::SectionHeader("Trigger Activation");
+    {
+        // Mirror the aim activation control: pill row + optional bind.
+        static const Widgets::PillItem kTrigAlways[] = { { 1, "Always Active" } };
+        static const Widgets::PillItem kTrigHold[]   = { { 1, "Hold Key"      } };
+
+        int alwaysMask = (g_state.triggerActivationMode == Trigger::ACT_ALWAYS) ? 1 : 0;
+        int holdMask   = (g_state.triggerActivationMode == Trigger::ACT_HOLD)   ? 1 : 0;
+        if (Widgets::PillBitmaskRow("trig_act_always", &alwaysMask, kTrigAlways, 1)) {
+            g_state.triggerActivationMode = Trigger::ACT_ALWAYS;
+        }
+        ImGui::SameLine(0.0f, 8.0f);
+        if (Widgets::PillBitmaskRow("trig_act_hold", &holdMask, kTrigHold, 1)) {
+            g_state.triggerActivationMode = Trigger::ACT_HOLD;
+        }
+
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImGui::PushFont(g_fontSmall);
+        if (g_state.triggerActivationMode == Trigger::ACT_HOLD) {
+            ImGui::TextColored(kSubtleText, "Bind");
+            ImGui::SameLine(0.0f, 10.0f);
+            Widgets::Keybind("trigger.bind", &g_state.triggerActivationKey, "Unbound");
+            if (g_state.triggerActivationKey == 0) {
+                ImGui::SameLine(0.0f, 12.0f);
+                ImGui::TextColored(kWarning, "no key bound - trigger is inactive");
+            } else {
+                ImGui::SameLine(0.0f, 12.0f);
+                ImGui::TextColored(kSubtleText, "hold to fire . click to rebind . ESC clears");
+            }
+        } else {
+            ImGui::TextColored(kWarning, "Always Active will fire whenever your crosshair sits on an enemy.");
+        }
+        ImGui::PopFont();
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
+    ImGui::TextWrapped("Auto-fires LMB while the crosshair is on an enemy. Honors the team and visible filters from the ESP tab.");
+    ImGui::PopStyleColor();
 }
 
 static void RenderTabCombat() {
@@ -210,16 +300,90 @@ static void RenderTabCosmetics() {
     }
 }
 
-static void RenderTabDebug() {
-    Widgets::SectionHeader("Module");
-    ImGui::Text("Project.dll:  %p", GetModuleHandleA("Project.dll"));
-    ImGui::Text("StaticFields: %p", g_state.staticFields);
-    ImGui::Text("GameClient:   %p", g_state.gameClientStaticFields);
+// =====================================================================
+// Misc tab
+// =====================================================================
+//
+// Replaces the old Debug tab. The previous one leaked plenty of internals
+// the average user has no business seeing (raw class pointers, every
+// resolved IL2CPP method address, internal R/HP/Tr/OK counters, etc).
+//
+// What stays user-facing:
+//   - A single derived "Status" line: Ready / Waiting for match / etc.
+//   - Visible / hidden enemy counts (renamed from the dbg_ fields).
+//   - Trigger live state (Idle / Firing).
+//   - FPS overlay toggle (was misplaced under ESP > Filters).
+//   - Save Config + Unload buttons (were in the footer).
+//   - Resolved log path with Copy / Open Folder buttons.
+//
+// Anything diagnostic-but-noisy is now log-only; the log path is one
+// click away from the user when they need to send it.
+static const char* DeriveStatusLabel(ImVec4* outColor) {
+    if (!GetModuleHandleA("Project.dll")) {
+        if (outColor) *outColor = kSubtleText;
+        return "Game not detected";
+    }
+    if (!IL2CPP::fn_domain_get) {
+        if (outColor) *outColor = kWarning;
+        return "Booting";
+    }
+    if (!g_state.staticFields) {
+        if (outColor) *outColor = kWarning;
+        return "Waiting for match";
+    }
+    if (outColor) *outColor = kSuccess;
+    return "Ready";
+}
+
+static void RenderTabMisc() {
+    Widgets::SectionHeader("Status");
+    {
+        ImVec4 statusCol = kSubtleText;
+        const char* status = DeriveStatusLabel(&statusCol);
+        ImGui::TextColored(kSubtleText, "State:");
+        ImGui::SameLine(0.0f, 8.0f);
+        Widgets::HeaderPill(status, statusCol);
+
+        ImGui::PushFont(g_fontSmall);
+        ImGui::TextColored(kMutedText, "Enemies tracked: %d visible / %d hidden",
+                           g_state.dbg_visible, g_state.dbg_occluded);
+        ImGui::TextColored(kMutedText, "Triggerbot: %s",
+            !g_state.triggerEnabled         ? "off"
+            : Trigger::DebugIsClicking()    ? "firing"
+            : Trigger::IsActivationActive() ? "armed"
+                                            : "idle");
+        ImGui::PopFont();
+    }
+
+    Widgets::SectionHeader("Display");
+    Widgets::Toggle("FPS Overlay", &g_state.showFpsOverlay);
+
+    Widgets::SectionHeader("Config");
+    if (ImGui::Button("Save Config", ImVec2(140.0f, 0.0f))) {
+        Config::Save();
+    }
+    ImGui::SameLine(0.0f, 8.0f);
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.22f, 0.085f, 0.10f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.36f, 0.13f, 0.16f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.52f, 0.18f, 0.20f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.00f, 0.85f, 0.85f, 1.0f));
+    if (ImGui::Button("Unload", ImVec2(140.0f, 0.0f))) {
+        Hooks::RequestUnload();
+    }
+    ImGui::PopStyleColor(4);
+
+    if (Config::g_statusMsg[0] && (GetTickCount() - Config::g_statusTime) < 4000) {
+        ImGui::PushFont(g_fontSmall);
+        ImGui::TextColored(kAccent, "%s", Config::g_statusMsg);
+        ImGui::PopFont();
+    }
 
     Widgets::SectionHeader("Log file");
     const char* logPath = LogPath();
-    ImGui::TextWrapped("%s", logPath ? logPath : "(no writable location found)");
     if (logPath) {
+        ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
+        ImGui::TextWrapped("%s", logPath);
+        ImGui::PopStyleColor();
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
         if (ImGui::Button("Copy path", ImVec2(110.0f, 0.0f))) {
             ImGui::SetClipboardText(logPath);
@@ -235,33 +399,14 @@ static void RenderTabDebug() {
                 ShellExecuteA(NULL, "open", folder, NULL, NULL, SW_SHOWNORMAL);
             }
         }
+    } else {
+        ImGui::TextColored(kWarning, "Couldn't open a writable log location.");
     }
 
-    Widgets::SectionHeader("Resolved IL2CPP exports");
-    ImGui::Text("domain_get:                  %p", (void*)IL2CPP::fn_domain_get);
-    ImGui::Text("thread_attach:               %p", (void*)IL2CPP::fn_thread_attach);
-    ImGui::Text("class_from_name:             %p", (void*)IL2CPP::fn_class_from_name);
-    ImGui::Text("domain_get_assemblies:       %p", (void*)IL2CPP::fn_domain_get_assemblies);
-    ImGui::Text("class_get_method_from_name:  %p", (void*)IL2CPP::fn_class_get_method_from_name);
-
-    Widgets::SectionHeader("Resolved methods");
-    ImGui::Text("Camera.get_main:             %p", (void*)IL2CPP::fn_get_main_camera);
-    ImGui::Text("Camera.get_worldToCamera:    %p", (void*)IL2CPP::fn_get_worldToCamera);
-    ImGui::Text("Camera.get_projectionMatrix: %p", (void*)IL2CPP::fn_get_projectionMatrix);
-    ImGui::Text("Camera.WorldToScreenPoint:   %p", (void*)IL2CPP::fn_WorldToScreenPoint);
-    ImGui::Text("Component.get_transform:     %p", (void*)IL2CPP::fn_component_get_transform);
-    ImGui::Text("Transform.get_position:      %p", (void*)IL2CPP::fn_get_position);
-    ImGui::Text("PlayerRoot.get_TeamId:       %p", (void*)IL2CPP::fn_playerroot_get_teamid);
-    ImGui::Text("PlayerRoot.get_IsVisible:    %p", (void*)IL2CPP::fn_playerroot_get_is_visible);
-    ImGui::Text("PlayerHealth.get_IsDead:     %p", (void*)IL2CPP::fn_playerhealth_get_is_dead);
-    ImGui::Text("PlayerHealth.get_IsDowned:   %p", (void*)IL2CPP::fn_playerhealth_get_is_downed);
-
-    Widgets::SectionHeader("Counters");
-    ImGui::Text("Players  R:%d  HP:%d  Tr:%d  OK:%d",
-        g_state.dbg_pR, g_state.dbg_pHP, g_state.dbg_pTr, g_state.dbg_pW2S);
-    ImGui::Text("Filtered dead:%d  downed:%d  noHead:%d",
-        g_state.dbg_deadFiltered, g_state.dbg_downedFiltered, g_state.dbg_noHead);
-    ImGui::Text("Visible:%d  Hidden:%d", g_state.dbg_visible, g_state.dbg_occluded);
+    Widgets::SectionHeader("About");
+    ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
+    ImGui::TextWrapped("Cm-Hax  -  Combat Master internal IL2CPP tooling. Educational project; loading into the live game violates the game's Terms of Service.");
+    ImGui::PopStyleColor();
 }
 
 static void RenderActiveTab() {
@@ -270,7 +415,7 @@ static void RenderActiveTab() {
         case TAB_AIM:        RenderTabAim();        break;
         case TAB_COMBAT:     RenderTabCombat();     break;
         case TAB_COSMETICS:  RenderTabCosmetics();  break;
-        case TAB_DEBUG:      RenderTabDebug();      break;
+        case TAB_MISC:       RenderTabMisc();       break;
         default:             RenderTabESP();        break;
     }
 }
@@ -488,7 +633,7 @@ void Draw() {
             ac0, ac1, ac1, ac0);
     }
 
-    // Hotkeys + cfg status
+    // Hotkeys + cfg status. Save / Unload buttons live on the Misc tab now.
     {
         float padL = 18.0f;
         float baseY = kHeaderH + bodyH + 14.0f;
@@ -498,7 +643,6 @@ void Draw() {
         const KeyCap caps[] = {
             { "INS", "menu"   },
             { "END", "unload" },
-            { "RMB", "aim"    },
         };
 
         float cursorX = padL;
@@ -531,51 +675,27 @@ void Draw() {
             ImGui::SetCursorPos(ImVec2(cursorX, baseY));
             ImGui::TextColored(kAccent, "  %s", Config::g_statusMsg);
         }
-        ImGui::PopFont();
-    }
 
-    // Save + Unload buttons (cohesive pair)
-    {
-        const char* saveLabel = "Save";
-        const char* btnLabel  = "Unload";
-        ImVec2 saveSize = ImVec2(78.0f, 28.0f);
-        ImVec2 btnSize  = ImVec2(82.0f, 28.0f);
-
-        float btnY = kHeaderH + bodyH + 9.0f;
-
-        ImGui::SetCursorPos(ImVec2(winSize.x - btnSize.x - 14.0f, btnY));
+        // Right-aligned status pill: derives from runtime state, no buttons.
         {
-            ImVec2 sp = ImGui::GetCursorScreenPos();
-            fg->AddRectFilled(
-                ImVec2(sp.x - 1.0f, sp.y - 1.0f),
-                ImVec2(sp.x + btnSize.x + 1.0f, sp.y + btnSize.y + 1.0f),
-                ImGui::ColorConvertFloat4ToU32(ImVec4(kDanger.x, kDanger.y, kDanger.z, 0.10f)),
-                6.0f);
-        }
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.22f, 0.085f, 0.10f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.36f, 0.13f, 0.16f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.52f, 0.18f, 0.20f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(1.00f, 0.85f, 0.85f, 1.0f));
-        if (ImGui::Button(btnLabel, btnSize)) {
-            Hooks::RequestUnload();
-        }
-        ImGui::PopStyleColor(4);
-        ImGui::PopStyleVar();
+            ImVec4 statusCol = kSubtleText;
+            const char* status = DeriveStatusLabel(&statusCol);
+            ImVec2 sz = ImGui::CalcTextSize(status);
+            float padX = 9.0f, padY = 3.0f;
+            float pillW = sz.x + padX * 2.0f;
+            float pillH = sz.y + padY * 2.0f;
+            float px = winPos.x + winSize.x - pillW - 18.0f;
+            float py = winPos.y + baseY - 2.0f;
 
-        ImGui::SetCursorPos(ImVec2(winSize.x - btnSize.x - saveSize.x - 22.0f, btnY));
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.060f, 0.078f, 0.105f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.085f, 0.115f, 0.155f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.115f, 0.155f, 0.205f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_Border,        ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.45f));
-        ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.92f, 0.97f, 1.0f, 1.0f));
-        if (ImGui::Button(saveLabel, saveSize)) {
-            Config::Save();
+            ImU32 bg     = ImGui::ColorConvertFloat4ToU32(ImVec4(statusCol.x, statusCol.y, statusCol.z, 0.18f));
+            ImU32 border = ImGui::ColorConvertFloat4ToU32(ImVec4(statusCol.x, statusCol.y, statusCol.z, 0.55f));
+            fg->AddRectFilled(ImVec2(px, py), ImVec2(px + pillW, py + pillH), bg, pillH * 0.5f);
+            fg->AddRect      (ImVec2(px, py), ImVec2(px + pillW, py + pillH), border, pillH * 0.5f, 0, 1.0f);
+            fg->AddText      (ImVec2(px + padX, py + padY),
+                              ImGui::ColorConvertFloat4ToU32(statusCol), status);
         }
-        ImGui::PopStyleColor(5);
-        ImGui::PopStyleVar(2);
+
+        ImGui::PopFont();
     }
 
     ImGui::End();
