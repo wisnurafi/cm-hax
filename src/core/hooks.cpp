@@ -242,6 +242,139 @@ static void* FindStaticFields(void* classObj, void (*onFound)(void* candidate, i
     return NULL; // unused, here to keep the file pattern open if needed later
 }
 
+// ----------------------------------------------------------------
+// Static-field scans. Both classes hold their static block at an
+// offset inside the IL2CPP class object that's only populated after
+// the class's static constructor (.cctor) has run.
+//
+// PlayerRoot.cctor fires on first instantiation (match start).
+// GameClient.cctor fires when the singleton initializes.
+//
+// On some machines (and any injection-before-match flow) these
+// haven't run yet at MainThread time, so the original one-shot
+// scan would fail and the cheat would stay gated forever. Splitting
+// these out lets the ESP data thread retry them.
+// ----------------------------------------------------------------
+
+// Find the PlayerRoot class. Cached after the first successful lookup so
+// every retry doesn't re-walk the assembly list.
+static void* s_playerRootClass = NULL;
+
+static void* ResolvePlayerRootClass() {
+    if (s_playerRootClass) return s_playerRootClass;
+    if (!IL2CPP::fn_class_from_name || !IL2CPP::fn_domain_get || !IL2CPP::fn_domain_get_assemblies) {
+        return NULL;
+    }
+
+    void* battleImage = IL2CPP::FindImage("_CombatMaster.Battle");
+    if (battleImage) {
+        s_playerRootClass = IL2CPP::fn_class_from_name(battleImage,
+            "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
+        if (s_playerRootClass) return s_playerRootClass;
+    }
+
+    size_t asmCount = 0;
+    void** asms = IL2CPP::fn_domain_get_assemblies(IL2CPP::fn_domain_get(), &asmCount);
+    if (!asms) return NULL;
+    for (size_t i = 0; i < asmCount; i++) {
+        void* assembly = asms[i];
+        if (!assembly) continue;
+        void* image = *(void**)assembly;
+        if (!image) continue;
+        s_playerRootClass = IL2CPP::fn_class_from_name(image,
+            "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
+        if (s_playerRootClass) return s_playerRootClass;
+    }
+    return NULL;
+}
+
+// PlayerRoot static block validation: AllPlayers list lives at +0x18 of the
+// static block, so a candidate is "real" if it points at a plausible
+// Il2CppList<PlayerRoot> (size in [0,100], non-null _items).
+static bool ScanPlayerRootStatics() {
+    if (g_state.staticFields) return true;
+
+    void* playerRootClass = ResolvePlayerRootClass();
+    if (!playerRootClass) return false;
+
+    uint8_t* classBytes = (uint8_t*)playerRootClass;
+    for (int off = 0xB0; off < 0x200; off += 8) {
+        __try {
+            void* candidate = *(void**)(classBytes + off);
+            if (!candidate || (uintptr_t)candidate < 0x10000) continue;
+            void* testAllPlayers = *(void**)((uint8_t*)candidate + 0x18);
+            if (testAllPlayers && (uintptr_t)testAllPlayers > 0x10000) {
+                Il2CppList* list = (Il2CppList*)testAllPlayers;
+                if (list->_size >= 0 && list->_size < 100 && list->_items
+                    && (uintptr_t)list->_items > 0x10000) {
+                    g_state.staticFields = candidate;
+                    Log("staticFields found at offset 0x%X: %p", off, candidate);
+                    return true;
+                }
+            }
+        } __except(1) {}
+    }
+    return false;
+}
+
+// GameClient class is cached the same way.
+static void* s_gameClientClass = NULL;
+
+static void* ResolveGameClientClass() {
+    if (s_gameClientClass) return s_gameClientClass;
+    if (!IL2CPP::fn_class_from_name || !IL2CPP::fn_domain_get || !IL2CPP::fn_domain_get_assemblies) {
+        return NULL;
+    }
+
+    size_t asmCount = 0;
+    void** asms = IL2CPP::fn_domain_get_assemblies(IL2CPP::fn_domain_get(), &asmCount);
+    if (!asms) return NULL;
+    for (size_t i = 0; i < asmCount; i++) {
+        void* assembly = asms[i];
+        if (!assembly) continue;
+        void* image = *(void**)assembly;
+        if (!image) continue;
+        s_gameClientClass = IL2CPP::fn_class_from_name(image, "CombatMaster.Client", "GameClient");
+        if (s_gameClientClass) return s_gameClientClass;
+    }
+    return NULL;
+}
+
+// GameClient static block validation: _ref lives at +0x0, ProfileCache at
+// _ref+0x60. We only accept a candidate if both indirections are plausible
+// (non-null, non-tiny). Until the singleton wakes up, _ref is null and we
+// don't latch.
+static bool ScanGameClientStatics() {
+    if (g_state.gameClientStaticFields) return true;
+
+    void* gameClientClass = ResolveGameClientClass();
+    if (!gameClientClass) return false;
+
+    uint8_t* gcBytes = (uint8_t*)gameClientClass;
+    for (int off = 0xB0; off < 0x200; off += 8) {
+        __try {
+            void* candidate = *(void**)(gcBytes + off);
+            if (!candidate || (uintptr_t)candidate < 0x10000) continue;
+            void* ref = *(void**)((uint8_t*)candidate + 0x0);
+            if (IsPlausiblePtr(ref)) {
+                void* profileTest = *(void**)((uint8_t*)ref + 0x60);
+                if (IsPlausiblePtr(profileTest)) {
+                    g_state.gameClientStaticFields = candidate;
+                    Log("GameClient statics at 0x%X: %p (_ref=%p)", off, candidate, ref);
+                    return true;
+                }
+            }
+        } __except(1) {}
+    }
+    return false;
+}
+
+// Public retry hook used by the ESP data thread. Idempotent and cheap.
+void PollStaticFields() {
+    if (!g_state.staticFields)           ScanPlayerRootStatics();
+    if (!g_state.gameClientStaticFields) ScanGameClientStatics();
+}
+
 DWORD WINAPI MainThread(LPVOID /*p*/) {
     char mutexName[128];
     snprintf(mutexName, sizeof(mutexName), "Local\\cm_hax_single_init_%lu", GetCurrentProcessId());
@@ -277,79 +410,19 @@ DWORD WINAPI MainThread(LPVOID /*p*/) {
         g_state.espEnabled = false;
     }
 
-    // 2. Locate PlayerRoot static fields (heuristic search 0xB0..0x200)
-    void* playerRootClass = NULL;
-    if (void* battleImage = IL2CPP::FindImage("_CombatMaster.Battle")) {
-        playerRootClass = IL2CPP::fn_class_from_name(battleImage,
-            "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
+    // 2-3. Locate PlayerRoot + GameClient static fields.
+    //
+    // Both rely on the target class's static constructor having run, which
+    // doesn't always happen by the time we get here (especially when the
+    // user injects from the lobby / loading screen). PollStaticFields() is
+    // idempotent; the ESP data thread retries it every cycle until both
+    // are resolved, so this initial call just gets us a head start.
+    PollStaticFields();
+    if (!g_state.staticFields) {
+        Log("staticFields not yet resolved at startup; will retry from data thread");
     }
-    if (!playerRootClass) {
-        size_t asmCount = 0;
-        void** asms = IL2CPP::fn_domain_get_assemblies(IL2CPP::fn_domain_get(), &asmCount);
-        for (size_t i = 0; i < asmCount; i++) {
-            void* assembly = asms[i];
-            if (!assembly) continue;
-            void* image = *(void**)assembly;
-            if (!image) continue;
-            playerRootClass = IL2CPP::fn_class_from_name(image,
-                "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
-            if (playerRootClass) break;
-        }
-    }
-    if (playerRootClass) {
-        Log("PlayerRoot Class: %p", playerRootClass);
-        uint8_t* classBytes = (uint8_t*)playerRootClass;
-        for (int off = 0xB0; off < 0x200; off += 8) {
-            __try {
-                void* candidate = *(void**)(classBytes + off);
-                if (!candidate || (uintptr_t)candidate < 0x10000) continue;
-                void* testAllPlayers = *(void**)((uint8_t*)candidate + 0x18);
-                if (testAllPlayers && (uintptr_t)testAllPlayers > 0x10000) {
-                    Il2CppList* list = (Il2CppList*)testAllPlayers;
-                    if (list->_size >= 0 && list->_size < 100 && list->_items && (uintptr_t)list->_items > 0x10000) {
-                        g_state.staticFields = candidate;
-                        Log("staticFields found at offset 0x%X: %p", off, candidate);
-                        break;
-                    }
-                }
-            } __except(1) {}
-        }
-    }
-
-    // 3. Locate GameClient static fields (for cosmetic save)
-    {
-        void* gameClientClass = NULL;
-        size_t asmCount2 = 0;
-        void** asms2 = IL2CPP::fn_domain_get_assemblies(IL2CPP::fn_domain_get(), &asmCount2);
-        for (size_t i = 0; i < asmCount2 && !gameClientClass; i++) {
-            void* assembly = asms2[i];
-            if (!assembly) continue;
-            void* image = *(void**)assembly;
-            if (!image) continue;
-            gameClientClass = IL2CPP::fn_class_from_name(image, "CombatMaster.Client", "GameClient");
-        }
-        if (gameClientClass) {
-            Log("GameClient class: %p", gameClientClass);
-            uint8_t* gcBytes = (uint8_t*)gameClientClass;
-            for (int off = 0xB0; off < 0x200; off += 8) {
-                __try {
-                    void* candidate = *(void**)(gcBytes + off);
-                    if (!candidate || (uintptr_t)candidate < 0x10000) continue;
-                    void* ref = *(void**)((uint8_t*)candidate + 0x0);
-                    if (IsPlausiblePtr(ref)) {
-                        void* profileTest = *(void**)((uint8_t*)ref + 0x60);
-                        if (IsPlausiblePtr(profileTest)) {
-                            g_state.gameClientStaticFields = candidate;
-                            Log("GameClient statics at 0x%X: %p (_ref=%p)", off, candidate, ref);
-                            break;
-                        }
-                    }
-                } __except(1) {}
-            }
-            if (!g_state.gameClientStaticFields) Log("GameClient static fields not found");
-        } else {
-            Log("GameClient class not found");
-        }
+    if (!g_state.gameClientStaticFields) {
+        Log("GameClient static fields not yet resolved at startup; will retry from data thread");
     }
 
     // 4. D3D11 hook
