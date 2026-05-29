@@ -9,6 +9,7 @@
 #include "esp.h"
 #include "combat.h"
 #include "../core/globals.h"
+#include "../core/hooks.h"
 #include "../core/logging.h"
 #include "../game/il2cpp.h"
 #include "../game/player.h"
@@ -25,8 +26,23 @@ DWORD WINAPI DataThread(LPVOID /*lpReserved*/) {
     }
     Log("ESPDataThread running; ESP starts disabled until enabled in menu");
 
+    // Poll the static-field scans roughly twice per second while either is
+    // unresolved. The .cctors fire when the user enters a match (PlayerRoot)
+    // or when the GameClient singleton wakes up, neither of which is
+    // guaranteed by the time MainThread runs. Capping at 16ms granularity
+    // means we converge within ~500ms of cctor firing.
+    DWORD lastPollTick = 0;
+
     while (InterlockedCompareExchange(&Runtime::g_running, 1, 1) != 0) {
         Sleep(16); // ~60fps data collection
+
+        if (!g_state.staticFields || !g_state.gameClientStaticFields) {
+            DWORD now = GetTickCount();
+            if (now - lastPollTick >= 500) {
+                lastPollTick = now;
+                Hooks::PollStaticFields();
+            }
+        }
 
         if (!g_state.espEnabled
             || !g_state.staticFields
