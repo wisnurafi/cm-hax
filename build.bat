@@ -145,46 +145,9 @@ echo [+] %OUT_DIR%\injector.exe
 exit /b 0
 
 rem ================================================================
-rem resolve_minhook: figure out where MinHook lives.
-rem ================================================================
-:resolve_minhook
-set "MINHOOK_INCLUDE="
-set "MINHOOK_INPUTS="
-
-if exist "%ROOT%third_party\minhook\include\MinHook.h" (
-    set "MINHOOK_INCLUDE=%ROOT%third_party\minhook\include"
-    if exist "%ROOT%third_party\minhook\src\hook.c" if exist "%ROOT%third_party\minhook\src\buffer.c" if exist "%ROOT%third_party\minhook\src\trampoline.c" if exist "%ROOT%third_party\minhook\src\hde\hde64.c" (
-        set "MINHOOK_INPUTS=%ROOT%third_party\minhook\src\hook.c %ROOT%third_party\minhook\src\buffer.c %ROOT%third_party\minhook\src\trampoline.c %ROOT%third_party\minhook\src\hde\hde64.c"
-        exit /b 0
-    )
-
-    for %%L in ("%ROOT%third_party\minhook\lib\libMinHook.x64.lib" "%ROOT%third_party\minhook\lib\minhook.lib" "%ROOT%third_party\minhook\build\VC17\libMinHook.x64.lib" "%ROOT%third_party\minhook\build\VC16\libMinHook.x64.lib" "%ROOT%third_party\minhook\build\VC15\libMinHook.x64.lib") do (
-        if not defined MINHOOK_INPUTS if exist "%%~fL" set "MINHOOK_INPUTS=%%~fL"
-    )
-)
-
-if not defined MINHOOK_INPUTS if defined VCPKG_ROOT (
-    if exist "%VCPKG_ROOT%\installed\x64-windows\include\MinHook.h" (
-        set "MINHOOK_INCLUDE=%VCPKG_ROOT%\installed\x64-windows\include"
-        for %%L in ("%VCPKG_ROOT%\installed\x64-windows\lib\*minhook*.lib" "%VCPKG_ROOT%\installed\x64-windows\lib\*MinHook*.lib") do (
-            if not defined MINHOOK_INPUTS if exist "%%~fL" set "MINHOOK_INPUTS=%%~fL"
-        )
-    )
-)
-
-if defined MINHOOK_INCLUDE if defined MINHOOK_INPUTS exit /b 0
-
-echo [!] MinHook not found.
-echo [!] Run `build.bat setup` to fetch dependencies, or place MinHook at
-echo     %ROOT%third_party\minhook\ with include\MinHook.h and src\.
-exit /b 1
-
-rem ================================================================
 rem build_menu (cm_hax.dll)
 rem ================================================================
 :build_menu
-call :resolve_minhook
-if errorlevel 1 exit /b 1
 if not exist "%ROOT%third_party\imgui\imgui.h" (
     echo [!] ImGui not found at %ROOT%third_party\imgui\.
     echo [!] Run `build.bat setup` to fetch dependencies.
@@ -196,7 +159,6 @@ echo [*] Building cm_hax.dll...
 cl %COMMON_FLAGS% /LD ^
     /I"%ROOT%third_party\imgui" ^
     /I"%ROOT%third_party\imgui\backends" ^
-    /I"%MINHOOK_INCLUDE%" ^
     /I"%ROOT%src" ^
     "%ROOT%src\dllmain.cpp" ^
     "%ROOT%src\core\globals.cpp" ^
@@ -228,7 +190,6 @@ cl %COMMON_FLAGS% /LD ^
     "%ROOT%third_party\imgui\imgui_widgets.cpp" ^
     "%ROOT%third_party\imgui\backends\imgui_impl_win32.cpp" ^
     "%ROOT%third_party\imgui\backends\imgui_impl_dx11.cpp" ^
-    %MINHOOK_INPUTS% ^
     /Fo"%THIS_OBJ_DIR%\\" ^
     /Fe"%OUT_DIR%\cm_hax.dll" ^
     /link %LINK_FLAGS% d3d11.lib dxgi.lib user32.lib gdi32.lib
@@ -265,14 +226,6 @@ if not exist "%ROOT%third_party\imgui\imgui.h" (
     if errorlevel 1 ( echo [!] Clone failed. & exit /b 1 )
 ) else (
     echo [+] third_party\imgui already present
-)
-
-if not exist "%ROOT%third_party\minhook\include\MinHook.h" (
-    echo [*] Cloning MinHook (v1.3.3) into third_party\minhook...
-    git clone --depth 1 --branch v1.3.3 https://github.com/TsudaKageyu/minhook "%ROOT%third_party\minhook"
-    if errorlevel 1 ( echo [!] Clone failed. & exit /b 1 )
-) else (
-    echo [+] third_party\minhook already present
 )
 
 echo.

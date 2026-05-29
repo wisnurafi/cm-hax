@@ -12,13 +12,13 @@ This repo exists as a learning resource for IL2CPP reverse engineering. See the
 
 | Path | Description |
 |------|-------------|
-| `injector/main.cpp` -> `injector.exe` | Waits for `CombatMaster.exe`, raises `SeDebugPrivilege`, classic `CreateRemoteThread` + `LoadLibraryA` injection. |
+| `injector/main.cpp` -> `injector.exe` | Waits for `CombatMaster.exe`, raises `SeDebugPrivilege`, manual-maps the DLL into the target process (no `LoadLibrary`, no PEB/module list entry). |
 | `dumper/main.cpp` -> `dumper.dll` | Internal IL2CPP dumper. Walks domain -> assemblies -> images -> classes -> fields/methods and writes a C#-style file. |
-| `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` hook + ImGui overlay). ESP, aimbot, triggerbot, no-recoil, no-spread, cosmetic byte patches. |
+| `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` VMT hook + ImGui overlay). ESP, aimbot, triggerbot, no-recoil, no-spread, cosmetic byte patches. Features compile-time string encryption and PE header erasure for stealth. |
 | `reference/CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
 | `dumps/` (gitignored) | Runtime output from `dumper.dll`. Re-inject to refresh after a game patch. |
 | `docs/` | Architecture overview and offset-update workflow. |
-| `third_party/imgui`, `third_party/minhook` | Vendored dependencies for the menu DLL (fetched by `build.bat setup`). |
+| `third_party/imgui` | Vendored dependency for the menu DLL (fetched by `build.bat setup`). |
 
 ## Source layout (`src/`)
 
@@ -55,6 +55,8 @@ src/
     memory.{cpp,h}            IsPlausiblePtr, BytePatch
     strings.{cpp,h}           Il2CppString -> UTF-8 helper
     input.{cpp,h}             VK helpers, keybind polling
+    stealth.h                 PE header erasure
+    xorstr.h                  compile-time XOR string encryption
 ```
 
 ## How the IL2CPP API gets resolved
@@ -94,7 +96,7 @@ and falls back to common install paths.
 ## Quick start (one-command build)
 
 ```bat
-build.bat setup        :: clones ImGui + MinHook into third_party/  (run once)
+build.bat setup        :: clones ImGui into third_party/  (run once)
 build.bat              :: Release build of injector + cm_hax.dll + dumper.dll
 build\Release\injector.exe
 ```
@@ -156,16 +158,7 @@ third_party/imgui/         (https://github.com/ocornut/imgui, v1.91.6 tested)
   backends/
     imgui_impl_win32.cpp + .h
     imgui_impl_dx11.cpp  + .h
-
-third_party/minhook/       (https://github.com/TsudaKageyu/minhook, v1.3.3 tested)
-  include/MinHook.h
-  src/hook.c, buffer.c, trampoline.c
-  src/hde/hde64.c
 ```
-
-A prebuilt x64 `.lib` (e.g. `third_party/minhook/lib/libMinHook.x64.lib`) or
-a vcpkg install under `%VCPKG_ROOT%` works too. The build script tries each
-location in order.
 
 ## Run
 
@@ -176,7 +169,8 @@ Run `build\Release\injector.exe` as Administrator and pick a target:
 - `q` - quit
 
 The injector polls for `CombatMaster.exe`, gives the process 3 seconds to
-initialize, then injects. Command-line shortcuts:
+initialize, then manual-maps the DLL into the target. The DLL does not appear
+in the process module list. Command-line shortcuts:
 
 ```bat
 build\Release\injector.exe --menu
@@ -209,7 +203,7 @@ stale every game patch - re-inject the dumper to refresh it.
 
 ## Updating offsets after a game patch
 
-`src/game/offsets.h` and a few RVAs inside `src/features/cosmetics.cpp` are
+`src/il2cpp/offsets.h` and a few RVAs inside `src/features/cosmetics.cpp` are
 tied to a specific build of `Project.dll`:
 
 - Player-related field offsets (`OFF_PLAYERROOT_*`, `OFF_PLAYERHEALTH_*`,
@@ -217,10 +211,10 @@ tied to a specific build of `Project.dll`:
 - 13 `Is*Available` RVAs in `kUnlockRVAs[]` (cosmetic unlock patch).
 - 4 `Buy*` RVAs and `CharacterStore` field offsets in `Cosmetics::SaveEquippedToCloud`.
 - One `Transform.get_position_Injected` RVA used as a fallback when the
-  dynamic resolver fails (`src/game/il2cpp.cpp`).
+  dynamic resolver fails (`src/il2cpp/il2cpp.cpp`).
 
 After a game patch, regenerate the SDK header (e.g. with Il2CppDumper) and
-diff its field offsets and RVAs against the constants in `src/game/offsets.h`
+diff its field offsets and RVAs against the constants in `src/il2cpp/offsets.h`
 and `src/features/cosmetics.cpp`. The dumper has no game-specific offsets,
 so it survives patches as long as the mangled export names stay the same.
 
