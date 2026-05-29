@@ -6,6 +6,7 @@
 
 #include "il2cpp.h"
 #include "../core/logging.h"
+#include "../utils/xorstr.h"
 
 namespace IL2CPP {
     t_domain_get                   fn_domain_get                   = NULL;
@@ -77,14 +78,14 @@ namespace IL2CPP {
     }
 
     static void ResolveCoreModule(uintptr_t gameBase) {
-        void* coreModule = FindImage("UnityEngine.CoreModule");
+        void* coreModule = FindImage(ENC("UnityEngine.CoreModule"));
         if (!coreModule || !fn_class_get_method_from_name) {
             fn_get_position = (t_get_position_injected)(gameBase + 0x2FA9830); // fallback
             return;
         }
 
-        if (void* transformClass = fn_class_from_name(coreModule, "UnityEngine", "Transform")) {
-            if (void* mi = fn_class_get_method_from_name(transformClass, "get_position", 0)) {
+        if (void* transformClass = fn_class_from_name(coreModule, ENC("UnityEngine"), ENC("Transform"))) {
+            if (void* mi = fn_class_get_method_from_name(transformClass, ENC("get_position"), 0)) {
                 g_getPositionMethodInfo = mi;
                 fn_get_position = (t_get_position_injected)(*(void**)mi);
             } else {
@@ -92,19 +93,19 @@ namespace IL2CPP {
             }
         }
 
-        if (void* componentClass = fn_class_from_name(coreModule, "UnityEngine", "Component")) {
-            if (void* mi = fn_class_get_method_from_name(componentClass, "get_transform", 0)) {
+        if (void* componentClass = fn_class_from_name(coreModule, ENC("UnityEngine"), ENC("Component"))) {
+            if (void* mi = fn_class_get_method_from_name(componentClass, ENC("get_transform"), 0)) {
                 g_componentGetTransformMethodInfo = mi;
                 fn_component_get_transform = (t_component_get_transform)(*(void**)mi);
                 Log("Component.get_transform: %p", (void*)fn_component_get_transform);
             }
         }
 
-        void* physicsModule = FindImage("UnityEngine.PhysicsModule");
+        void* physicsModule = FindImage(ENC("UnityEngine.PhysicsModule"));
         if (!physicsModule) physicsModule = coreModule;
         if (physicsModule) {
-            if (void* ccClass = fn_class_from_name(physicsModule, "UnityEngine", "CharacterController")) {
-                if (void* mi = fn_class_get_method_from_name(ccClass, "Move", 1)) {
+            if (void* ccClass = fn_class_from_name(physicsModule, ENC("UnityEngine"), ENC("CharacterController"))) {
+                if (void* mi = fn_class_get_method_from_name(ccClass, ENC("Move"), 1)) {
                     g_characterControllerMoveMethodInfo = mi;
                     fn_charactercontroller_move = (t_charactercontroller_move)(*(void**)mi);
                     Log("CharacterController.Move: %p", (void*)fn_charactercontroller_move);
@@ -116,23 +117,23 @@ namespace IL2CPP {
             }
         }
 
-        if (void* cameraClass = fn_class_from_name(coreModule, "UnityEngine", "Camera")) {
-            if (void* mi = fn_class_get_method_from_name(cameraClass, "get_main", 0)) {
+        if (void* cameraClass = fn_class_from_name(coreModule, ENC("UnityEngine"), ENC("Camera"))) {
+            if (void* mi = fn_class_get_method_from_name(cameraClass, ENC("get_main"), 0)) {
                 g_getMainCameraMethodInfo = mi;
                 fn_get_main_camera = (t_get_main_camera)(*(void**)mi);
                 Log("Camera.get_main: %p", (void*)fn_get_main_camera);
             }
-            if (void* mi = fn_class_get_method_from_name(cameraClass, "get_worldToCameraMatrix", 0)) {
+            if (void* mi = fn_class_get_method_from_name(cameraClass, ENC("get_worldToCameraMatrix"), 0)) {
                 g_getWorldToCameraMethodInfo = mi;
                 fn_get_worldToCamera = (t_get_worldToCamera)(*(void**)mi);
                 Log("Camera.get_worldToCameraMatrix: %p", (void*)fn_get_worldToCamera);
             }
-            if (void* mi = fn_class_get_method_from_name(cameraClass, "get_projectionMatrix", 0)) {
+            if (void* mi = fn_class_get_method_from_name(cameraClass, ENC("get_projectionMatrix"), 0)) {
                 g_getProjectionMatrixMethodInfo = mi;
                 fn_get_projectionMatrix = (t_get_projectionMatrix)(*(void**)mi);
                 Log("Camera.get_projectionMatrix: %p", (void*)fn_get_projectionMatrix);
             }
-            if (void* mi = fn_class_get_method_from_name(cameraClass, "WorldToScreenPoint", 1)) {
+            if (void* mi = fn_class_get_method_from_name(cameraClass, ENC("WorldToScreenPoint"), 1)) {
                 g_worldToScreenPointMethodInfo = mi;
                 fn_WorldToScreenPoint = (t_WorldToScreenPoint)(*(void**)mi);
                 Log("Camera.WorldToScreenPoint: %p", (void*)fn_WorldToScreenPoint);
@@ -147,23 +148,23 @@ namespace IL2CPP {
     }
 
     static void ResolveBattleModule() {
-        void* battleImage = FindImage("_CombatMaster.Battle");
+        void* battleImage = FindImage(ENC("_CombatMaster.Battle"));
         void* playerRootClass = NULL;
 
         if (battleImage) {
             playerRootClass = fn_class_from_name(battleImage,
-                "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
+                ENC("CombatMaster.Battle.Gameplay.Player"), ENC("PlayerRoot"));
 
             if (void* battleExt = fn_class_from_name(battleImage,
-                    "CombatMaster.Battle.GameSession", "BattleExtensions")) {
-                if (void* mi = fn_class_get_method_from_name(battleExt, "Nickname", 1)) {
+                    ENC("CombatMaster.Battle.GameSession"), ENC("BattleExtensions"))) {
+                if (void* mi = fn_class_get_method_from_name(battleExt, ENC("Nickname"), 1)) {
                     g_battleExtensionsNicknameMethodInfo = mi;
                     fn_battleextensions_nickname = (t_netplayerdata_string)(*(void**)mi);
                     Log("BattleExtensions.Nickname: %p", (void*)fn_battleextensions_nickname);
                 } else {
                     Log("BattleExtensions.Nickname not found");
                 }
-                if (void* mi = fn_class_get_method_from_name(battleExt, "PlayFabId", 1)) {
+                if (void* mi = fn_class_get_method_from_name(battleExt, ENC("PlayFabId"), 1)) {
                     g_battleExtensionsPlayFabIdMethodInfo = mi;
                     fn_battleextensions_playfabid = (t_netplayerdata_string)(*(void**)mi);
                     Log("BattleExtensions.PlayFabId: %p", (void*)fn_battleextensions_playfabid);
@@ -183,7 +184,7 @@ namespace IL2CPP {
                 void* image = *(void**)assembly;
                 if (!image) continue;
                 playerRootClass = fn_class_from_name(image,
-                    "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
+                    ENC("CombatMaster.Battle.Gameplay.Player"), ENC("PlayerRoot"));
                 if (playerRootClass) {
                     Log("Found PlayerRoot in image: %s", *(const char**)image);
                     break;
@@ -193,14 +194,14 @@ namespace IL2CPP {
 
         if (playerRootClass) {
             Log("PlayerRoot Class: %p", playerRootClass);
-            if (void* mi = fn_class_get_method_from_name(playerRootClass, "get_TeamId", 0)) {
+            if (void* mi = fn_class_get_method_from_name(playerRootClass, ENC("get_TeamId"), 0)) {
                 g_playerRootGetTeamIdMethodInfo = mi;
                 fn_playerroot_get_teamid = (t_playerroot_get_teamid)(*(void**)mi);
                 Log("PlayerRoot.get_TeamId: %p", (void*)fn_playerroot_get_teamid);
             } else {
                 Log("PlayerRoot.get_TeamId not found; team check will be inactive");
             }
-            if (void* mi = fn_class_get_method_from_name(playerRootClass, "get_IsVisible", 0)) {
+            if (void* mi = fn_class_get_method_from_name(playerRootClass, ENC("get_IsVisible"), 0)) {
                 g_playerRootGetIsVisibleMethodInfo = mi;
                 fn_playerroot_get_is_visible = (t_playerroot_bool)(*(void**)mi);
                 Log("PlayerRoot.get_IsVisible: %p", (void*)fn_playerroot_get_is_visible);
@@ -210,15 +211,15 @@ namespace IL2CPP {
 
             if (battleImage) {
                 if (void* phClass = fn_class_from_name(battleImage,
-                        "CombatMaster.Battle.Gameplay.Player", "PlayerHealth")) {
-                    if (void* mi = fn_class_get_method_from_name(phClass, "get_IsDead", 0)) {
+                        ENC("CombatMaster.Battle.Gameplay.Player"), ENC("PlayerHealth"))) {
+                    if (void* mi = fn_class_get_method_from_name(phClass, ENC("get_IsDead"), 0)) {
                         g_playerHealthIsDeadMethodInfo = mi;
                         fn_playerhealth_get_is_dead = (t_playerhealth_bool)(*(void**)mi);
                         Log("PlayerHealth.get_IsDead: %p", (void*)fn_playerhealth_get_is_dead);
                     } else {
                         Log("PlayerHealth.get_IsDead not found");
                     }
-                    if (void* mi = fn_class_get_method_from_name(phClass, "get_IsDowned", 0)) {
+                    if (void* mi = fn_class_get_method_from_name(phClass, ENC("get_IsDowned"), 0)) {
                         g_playerHealthIsDownedMethodInfo = mi;
                         fn_playerhealth_get_is_downed = (t_playerhealth_bool)(*(void**)mi);
                         Log("PlayerHealth.get_IsDowned: %p", (void*)fn_playerhealth_get_is_downed);
@@ -234,11 +235,11 @@ namespace IL2CPP {
 
     bool ResolveAll(HMODULE projectDll) {
         hProject = projectDll;
-        fn_domain_get                 = (t_domain_get)               GetProcAddress(projectDll, "ApzldXylDWR");
-        fn_thread_attach              = (t_thread_attach)            GetProcAddress(projectDll, "ZxbKYsbhTwf");
-        fn_class_from_name            = (t_class_from_name)          GetProcAddress(projectDll, "etIgYqMGBTj");
-        fn_domain_get_assemblies      = (t_domain_get_assemblies)    GetProcAddress(projectDll, "gobBtMyApTj");
-        fn_class_get_method_from_name = (t_class_get_method_from_name)GetProcAddress(projectDll, "BfmNBPOFdWH");
+        fn_domain_get                 = (t_domain_get)               GetProcAddress(projectDll, ENC("ApzldXylDWR"));
+        fn_thread_attach              = (t_thread_attach)            GetProcAddress(projectDll, ENC("ZxbKYsbhTwf"));
+        fn_class_from_name            = (t_class_from_name)          GetProcAddress(projectDll, ENC("etIgYqMGBTj"));
+        fn_domain_get_assemblies      = (t_domain_get_assemblies)    GetProcAddress(projectDll, ENC("gobBtMyApTj"));
+        fn_class_get_method_from_name = (t_class_get_method_from_name)GetProcAddress(projectDll, ENC("BfmNBPOFdWH"));
 
         if (!fn_domain_get || !fn_thread_attach) return false;
 

@@ -1,5 +1,7 @@
-// injector.cpp - Watches for CombatMaster.exe and injects the selected DLL
-// Compile: cl /EHsc /O2 injector.cpp /link /OUT:injector.exe
+// injector.cpp - Manual Map injector (stealth)
+// No LoadLibrary, no PEB entry. DLL is invisible to module enumeration.
+// Uses CreateRemoteThread to execute the mapping shellcode.
+// Compile: cl /EHsc /O2 injector.cpp /link /OUT:injector.exe advapi32.lib
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <tlhelp32.h>
@@ -8,19 +10,151 @@
 
 #pragma comment(lib, "advapi32.lib")
 
+// ================================================================
+// Structures
+// ================================================================
+typedef BOOL(WINAPI* DllMain_t)(HINSTANCE, DWORD, LPVOID);
+typedef HMODULE(WINAPI* pLoadLibraryA)(LPCSTR);
+typedef FARPROC(WINAPI* pGetProcAddress)(HMODULE, LPCSTR);
+typedef BOOL(WINAPI* pRtlAddFunctionTable)(PRUNTIME_FUNCTION, DWORD, DWORD64);
+
+struct ManualMapData {
+    LPVOID imageBase;
+    pLoadLibraryA fnLoadLibraryA;
+    pGetProcAddress fnGetProcAddress;
+    pRtlAddFunctionTable fnRtlAddFunctionTable;
+};
+
 struct InjectionTarget {
     const char* displayName;
     const char* dllName;
     const char* successMessage;
 };
 
+// ================================================================
+// Shellcode - runs inside target process
+// IMPORTANT: This function must NOT reference any global/static data,
+// string literals, or call any function not passed through ManualMapData.
+// Compile with /O2 to minimize compiler-generated helpers.
+// ================================================================
+#pragma runtime_checks("", off)
+#pragma optimize("", off)
+static DWORD WINAPI Shellcode(ManualMapData* pData) {
+    if (!pData) return 1;
+
+    // Guard against double-execution (APC queued to multiple threads)
+    // Use imageBase as the "already ran" flag — first thread to enter wins.
+    BYTE* base = (BYTE*)pData->imageBase;
+    if (!base) return 0; // Already executed by another thread
+
+    // Atomically claim execution by zeroing imageBase
+    // (simple race guard — not perfect but sufficient for our use case)
+    pData->imageBase = NULL;
+
+    IMAGE_DOS_HEADER* pDos = (IMAGE_DOS_HEADER*)base;
+    IMAGE_NT_HEADERS* pNt = (IMAGE_NT_HEADERS*)(base + pDos->e_lfanew);
+    IMAGE_OPTIONAL_HEADER* pOpt = &pNt->OptionalHeader;
+
+    pLoadLibraryA _LoadLibraryA = pData->fnLoadLibraryA;
+    pGetProcAddress _GetProcAddress = pData->fnGetProcAddress;
+    pRtlAddFunctionTable _RtlAddFunctionTable = pData->fnRtlAddFunctionTable;
+
+    // 1. Process relocations
+    ULONGLONG delta = (ULONGLONG)(base - pOpt->ImageBase);
+    if (delta) {
+        IMAGE_DATA_DIRECTORY* relocDir = &pOpt->DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC];
+        if (relocDir->Size) {
+            IMAGE_BASE_RELOCATION* pReloc = (IMAGE_BASE_RELOCATION*)(base + relocDir->VirtualAddress);
+            while (pReloc->VirtualAddress) {
+                DWORD count = (pReloc->SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / sizeof(WORD);
+                WORD* pEntry = (WORD*)(pReloc + 1);
+                for (DWORD i = 0; i < count; i++) {
+                    if ((pEntry[i] >> 12) == IMAGE_REL_BASED_DIR64) {
+                        ULONGLONG* pPatch = (ULONGLONG*)(base + pReloc->VirtualAddress + (pEntry[i] & 0xFFF));
+                        *pPatch += delta;
+                    }
+                }
+                pReloc = (IMAGE_BASE_RELOCATION*)((BYTE*)pReloc + pReloc->SizeOfBlock);
+            }
+        }
+    }
+
+    // 2. Resolve imports
+    IMAGE_DATA_DIRECTORY* importDir = &pOpt->DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (importDir->Size) {
+        IMAGE_IMPORT_DESCRIPTOR* pImport = (IMAGE_IMPORT_DESCRIPTOR*)(base + importDir->VirtualAddress);
+        while (pImport->Name) {
+            char* modName = (char*)(base + pImport->Name);
+            HMODULE hMod = _LoadLibraryA(modName);
+            if (hMod) {
+                IMAGE_THUNK_DATA* pThunk = (IMAGE_THUNK_DATA*)(base + pImport->OriginalFirstThunk);
+                IMAGE_THUNK_DATA* pFunc = (IMAGE_THUNK_DATA*)(base + pImport->FirstThunk);
+                if (!pImport->OriginalFirstThunk) {
+                    pThunk = pFunc;
+                }
+                while (pThunk->u1.AddressOfData) {
+                    if (IMAGE_SNAP_BY_ORDINAL64(pThunk->u1.Ordinal)) {
+                        pFunc->u1.Function = (ULONGLONG)_GetProcAddress(hMod, (LPCSTR)(pThunk->u1.Ordinal & 0xFFFF));
+                    } else {
+                        IMAGE_IMPORT_BY_NAME* pName = (IMAGE_IMPORT_BY_NAME*)(base + pThunk->u1.AddressOfData);
+                        pFunc->u1.Function = (ULONGLONG)_GetProcAddress(hMod, pName->Name);
+                    }
+                    pThunk++;
+                    pFunc++;
+                }
+            }
+            pImport++;
+        }
+    }
+
+    // 3. Register exception handlers (x64 SEH)
+    IMAGE_DATA_DIRECTORY* exceptDir = &pOpt->DataDirectory[IMAGE_DIRECTORY_ENTRY_EXCEPTION];
+    if (exceptDir->Size && _RtlAddFunctionTable) {
+        PRUNTIME_FUNCTION pFuncs = (PRUNTIME_FUNCTION)(base + exceptDir->VirtualAddress);
+        DWORD count = exceptDir->Size / sizeof(RUNTIME_FUNCTION);
+        _RtlAddFunctionTable(pFuncs, count, (DWORD64)base);
+    }
+
+    // 4. Execute TLS callbacks
+    IMAGE_DATA_DIRECTORY* tlsDir = &pOpt->DataDirectory[IMAGE_DIRECTORY_ENTRY_TLS];
+    if (tlsDir->Size) {
+        IMAGE_TLS_DIRECTORY* pTls = (IMAGE_TLS_DIRECTORY*)(base + tlsDir->VirtualAddress);
+        PIMAGE_TLS_CALLBACK* ppCallback = (PIMAGE_TLS_CALLBACK*)pTls->AddressOfCallBacks;
+        if (ppCallback) {
+            while (*ppCallback) {
+                (*ppCallback)((PVOID)base, DLL_PROCESS_ATTACH, NULL);
+                ppCallback++;
+            }
+        }
+    }
+
+    // 5. Call DllMain
+    if (pOpt->AddressOfEntryPoint) {
+        DllMain_t pDllMain = (DllMain_t)(base + pOpt->AddressOfEntryPoint);
+        pDllMain((HINSTANCE)base, DLL_PROCESS_ATTACH, NULL);
+    }
+
+    // Zero remaining data to remove traces
+    pData->fnLoadLibraryA = NULL;
+    pData->fnGetProcAddress = NULL;
+    pData->fnRtlAddFunctionTable = NULL;
+
+    return 0;
+}
+static DWORD WINAPI ShellcodeEnd() { return 0; }
+#pragma optimize("", on)
+#pragma runtime_checks("", restore)
+
+// ================================================================
+// Process utilities
+// ================================================================
 DWORD FindProcess(const char* name) {
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE) return 0;
-    
+
     PROCESSENTRY32 pe;
     pe.dwSize = sizeof(pe);
-    
+
     DWORD pid = 0;
     if (Process32First(snap, &pe)) {
         do {
@@ -30,7 +164,7 @@ DWORD FindProcess(const char* name) {
             }
         } while (Process32Next(snap, &pe));
     }
-    
+
     CloseHandle(snap);
     return pid;
 }
@@ -59,73 +193,226 @@ int EnableDebugPrivilege() {
     return err == ERROR_SUCCESS;
 }
 
-int InjectDLL(DWORD pid, const char* dllPath) {
+// ================================================================
+// Manual Map injection
+// ================================================================
+int ManualMapInject(DWORD pid, const char* dllPath) {
     printf("[*] Opening process %lu...\n", pid);
-    
+
     HANDLE hProc = OpenProcess(
-        PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | 
-        PROCESS_VM_WRITE | PROCESS_QUERY_INFORMATION,
+        PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION |
+        PROCESS_VM_WRITE | PROCESS_VM_READ | PROCESS_QUERY_INFORMATION,
         FALSE, pid
     );
-    
+
     if (!hProc) {
         printf("[!] OpenProcess failed: %lu\n", GetLastError());
         return 0;
     }
-    
-    // Allocate memory in target for DLL path
-    size_t pathLen = strlen(dllPath) + 1;
-    LPVOID remoteMem = VirtualAllocEx(hProc, NULL, pathLen, 
-                                       MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!remoteMem) {
-        printf("[!] VirtualAllocEx failed: %lu\n", GetLastError());
+
+    // Read DLL from disk
+    HANDLE hFile = CreateFileA(dllPath, GENERIC_READ, FILE_SHARE_READ, NULL,
+        OPEN_EXISTING, 0, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        printf("[!] Failed to open DLL file: %lu\n", GetLastError());
         CloseHandle(hProc);
         return 0;
     }
-    
-    // Write DLL path
-    if (!WriteProcessMemory(hProc, remoteMem, dllPath, pathLen, NULL)) {
-        printf("[!] WriteProcessMemory failed: %lu\n", GetLastError());
-        VirtualFreeEx(hProc, remoteMem, 0, MEM_RELEASE);
+
+    DWORD fileSize = GetFileSize(hFile, NULL);
+    BYTE* rawDll = (BYTE*)VirtualAlloc(NULL, fileSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!rawDll) {
+        printf("[!] Local VirtualAlloc failed\n");
+        CloseHandle(hFile);
         CloseHandle(hProc);
         return 0;
     }
-    
-    // Get LoadLibraryA address
-    HMODULE hKernel = GetModuleHandleA("kernel32.dll");
-    FARPROC loadLib = GetProcAddress(hKernel, "LoadLibraryA");
-    
-    // Create remote thread
-    printf("[*] Injecting DLL...\n");
-    HANDLE hThread = CreateRemoteThread(hProc, NULL, 0, 
-                                         (LPTHREAD_START_ROUTINE)loadLib,
-                                         remoteMem, 0, NULL);
+
+    DWORD bytesRead = 0;
+    ReadFile(hFile, rawDll, fileSize, &bytesRead, NULL);
+    CloseHandle(hFile);
+
+    if (bytesRead != fileSize) {
+        printf("[!] Failed to read entire DLL\n");
+        VirtualFree(rawDll, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    // Validate PE
+    IMAGE_DOS_HEADER* pDos = (IMAGE_DOS_HEADER*)rawDll;
+    if (pDos->e_magic != IMAGE_DOS_SIGNATURE) {
+        printf("[!] Invalid DOS signature\n");
+        VirtualFree(rawDll, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    IMAGE_NT_HEADERS* pNt = (IMAGE_NT_HEADERS*)(rawDll + pDos->e_lfanew);
+    if (pNt->Signature != IMAGE_NT_SIGNATURE) {
+        printf("[!] Invalid NT signature\n");
+        VirtualFree(rawDll, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    if (pNt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64) {
+        printf("[!] DLL is not x64\n");
+        VirtualFree(rawDll, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    IMAGE_OPTIONAL_HEADER* pOpt = &pNt->OptionalHeader;
+
+    // Allocate memory in target process for the image
+    printf("[*] Allocating %lu bytes in target process...\n", pOpt->SizeOfImage);
+    LPVOID remoteImage = VirtualAllocEx(hProc, NULL, pOpt->SizeOfImage,
+        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!remoteImage) {
+        printf("[!] VirtualAllocEx for image failed: %lu\n", GetLastError());
+        VirtualFree(rawDll, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    printf("[*] Remote image base: %p\n", remoteImage);
+
+    // Prepare local mapped image
+    BYTE* localImage = (BYTE*)VirtualAlloc(NULL, pOpt->SizeOfImage,
+        MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!localImage) {
+        printf("[!] Local image alloc failed\n");
+        VirtualFreeEx(hProc, remoteImage, 0, MEM_RELEASE);
+        VirtualFree(rawDll, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    // Copy headers
+    memcpy(localImage, rawDll, pOpt->SizeOfHeaders);
+
+    // Copy sections
+    IMAGE_SECTION_HEADER* pSections = IMAGE_FIRST_SECTION(pNt);
+    for (WORD i = 0; i < pNt->FileHeader.NumberOfSections; i++) {
+        if (pSections[i].SizeOfRawData > 0) {
+            memcpy(localImage + pSections[i].VirtualAddress,
+                rawDll + pSections[i].PointerToRawData,
+                pSections[i].SizeOfRawData);
+        }
+    }
+
+    // Write mapped image to target
+    if (!WriteProcessMemory(hProc, remoteImage, localImage, pOpt->SizeOfImage, NULL)) {
+        printf("[!] WriteProcessMemory (image) failed: %lu\n", GetLastError());
+        VirtualFree(localImage, 0, MEM_RELEASE);
+        VirtualFreeEx(hProc, remoteImage, 0, MEM_RELEASE);
+        VirtualFree(rawDll, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    VirtualFree(localImage, 0, MEM_RELEASE);
+    VirtualFree(rawDll, 0, MEM_RELEASE);
+
+    // Prepare ManualMapData
+    ManualMapData mapData = {};
+    mapData.imageBase = remoteImage;
+    mapData.fnLoadLibraryA = (pLoadLibraryA)GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA");
+    mapData.fnGetProcAddress = (pGetProcAddress)GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetProcAddress");
+    mapData.fnRtlAddFunctionTable = (pRtlAddFunctionTable)GetProcAddress(GetModuleHandleA("kernel32.dll"), "RtlAddFunctionTable");
+
+    // Calculate shellcode size
+    SIZE_T shellcodeSize = (SIZE_T)((BYTE*)ShellcodeEnd - (BYTE*)Shellcode);
+    if (shellcodeSize == 0 || shellcodeSize > 0x10000) {
+        shellcodeSize = 0x1000; // safe fallback
+    }
+
+    printf("[*] Shellcode size: %zu bytes\n", shellcodeSize);
+
+    // Allocate shellcode + data in target
+    SIZE_T totalSize = shellcodeSize + sizeof(ManualMapData) + 64;
+    LPVOID remoteAlloc = VirtualAllocEx(hProc, NULL, totalSize,
+        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!remoteAlloc) {
+        printf("[!] VirtualAllocEx for shellcode failed: %lu\n", GetLastError());
+        VirtualFreeEx(hProc, remoteImage, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    // Layout: [ManualMapData][padding][Shellcode]
+    BYTE* remoteDataAddr = (BYTE*)remoteAlloc;
+    BYTE* remoteCodeAddr = (BYTE*)remoteAlloc + sizeof(ManualMapData) + 16;
+
+    // Write data
+    if (!WriteProcessMemory(hProc, remoteDataAddr, &mapData, sizeof(mapData), NULL)) {
+        printf("[!] WriteProcessMemory (data) failed: %lu\n", GetLastError());
+        VirtualFreeEx(hProc, remoteAlloc, 0, MEM_RELEASE);
+        VirtualFreeEx(hProc, remoteImage, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    // Write shellcode
+    if (!WriteProcessMemory(hProc, remoteCodeAddr, (LPVOID)Shellcode, shellcodeSize, NULL)) {
+        printf("[!] WriteProcessMemory (shellcode) failed: %lu\n", GetLastError());
+        VirtualFreeEx(hProc, remoteAlloc, 0, MEM_RELEASE);
+        VirtualFreeEx(hProc, remoteImage, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    // ============================================================
+    // Execute shellcode via CreateRemoteThread
+    // Start address points to our shellcode in anonymous RWX memory,
+    // NOT to LoadLibrary. This is still stealthy because:
+    // - No LoadLibrary call to detect
+    // - No module list entry created
+    // - Thread start address is in unbacked anonymous memory
+    // ============================================================
+    printf("[*] Executing shellcode...\n");
+    HANDLE hThread = CreateRemoteThread(hProc, NULL, 0,
+        (LPTHREAD_START_ROUTINE)remoteCodeAddr,
+        remoteDataAddr, 0, NULL);
     if (!hThread) {
         printf("[!] CreateRemoteThread failed: %lu\n", GetLastError());
-        VirtualFreeEx(hProc, remoteMem, 0, MEM_RELEASE);
+        VirtualFreeEx(hProc, remoteAlloc, 0, MEM_RELEASE);
+        VirtualFreeEx(hProc, remoteImage, 0, MEM_RELEASE);
         CloseHandle(hProc);
         return 0;
     }
-    
-    // Wait for injection
-    WaitForSingleObject(hThread, 10000);
-    
-    DWORD exitCode = 0;
-    GetExitCodeThread(hThread, &exitCode);
-    
-    CloseHandle(hThread);
-    VirtualFreeEx(hProc, remoteMem, 0, MEM_RELEASE);
-    CloseHandle(hProc);
-    
-    if (exitCode == 0) {
-        printf("[!] LoadLibrary returned NULL - DLL may have failed to load\n");
+
+    DWORD waitResult = WaitForSingleObject(hThread, 15000);
+    if (waitResult == WAIT_TIMEOUT) {
+        printf("[!] Shellcode execution timed out\n");
+        CloseHandle(hThread);
+        CloseHandle(hProc);
         return 0;
     }
-    
-    printf("[+] DLL injected successfully! Module handle: 0x%lx\n", exitCode);
+
+    DWORD exitCode = 0;
+    GetExitCodeThread(hThread, &exitCode);
+    CloseHandle(hThread);
+
+    if (exitCode != 0) {
+        printf("[!] Shellcode returned error: %lu\n", exitCode);
+        VirtualFreeEx(hProc, remoteAlloc, 0, MEM_RELEASE);
+        CloseHandle(hProc);
+        return 0;
+    }
+
+    // Clean up shellcode allocation (image stays — it's our DLL)
+    VirtualFreeEx(hProc, remoteAlloc, 0, MEM_RELEASE);
+    CloseHandle(hProc);
+
+    printf("[+] Manual map injection successful!\n");
     return 1;
 }
 
+// ================================================================
+// UI / CLI
+// ================================================================
 int ResolveDllPath(const char* dllName, char* dllPath, size_t dllPathSize) {
     if (!GetModuleFileNameA(NULL, dllPath, (DWORD)dllPathSize)) {
         return 0;
@@ -195,16 +482,16 @@ int main(int argc, char* argv[]) {
     const InjectionTarget menuTarget = {
         "Menu",
         "cm_hax.dll",
-        "Menu DLL injected. The overlay should initialize in game."
+        "Menu DLL injected (manual map). No module list entry created."
     };
     const InjectionTarget dumperTarget = {
         "Dumper",
         "dumper.dll",
-        "Dumper DLL injected. Check the desktop dumper log/output after it finishes."
+        "Dumper DLL injected (manual map). Check the desktop dumper log/output."
     };
 
     printf("============================================================\n");
-    printf("  Combat Master - DLL Injector\n");
+    printf("  Combat Master - Stealth Injector (Manual Map)\n");
     printf("============================================================\n\n");
 
     const InjectionTarget* target = SelectTargetFromArgs(argc, argv, &menuTarget, &dumperTarget);
@@ -236,27 +523,27 @@ int main(int argc, char* argv[]) {
         printf("[!] Could not enable debug privilege. If injection fails, run as Administrator.\n");
     }
     printf("\n");
-    
+
     const char* procName = "CombatMaster.exe";
     printf("[*] Waiting for %s...\n", procName);
     printf("[*] Launch the game now!\n\n");
-    
+
     DWORD pid = 0;
     while (!pid) {
         pid = FindProcess(procName);
         if (!pid) {
-            Sleep(100); // Poll every 100ms
+            Sleep(100);
         }
     }
-    
+
     printf("[+] Found %s (PID: %lu)\n", procName, pid);
-    
-    // Wait a moment for the process to initialize
+
+    // Wait for process to initialize
     printf("[*] Waiting 3 seconds for process initialization...\n");
     Sleep(3000);
-    
+
     // Inject
-    if (InjectDLL(pid, dllPath)) {
+    if (ManualMapInject(pid, dllPath)) {
         printf("[+] Injection complete!\n");
         printf("[*] %s\n", target->successMessage);
         Sleep(1000);

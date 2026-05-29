@@ -14,14 +14,15 @@
 #include "imgui.h"
 #include "backends/imgui_impl_win32.h"
 #include "backends/imgui_impl_dx11.h"
-#include "MinHook.h"
 
 #include "../il2cpp/il2cpp.h"
 #include "../il2cpp/sdk.h"
 #include "../utils/memory.h"
+#include "../utils/xorstr.h"
 
 #include "../features/esp.h"
 #include "../features/cosmetics.h"
+#include "../utils/stealth.h"
 
 #include "../render/menu.h"
 #include "../render/menu_style.h"
@@ -40,6 +41,9 @@ typedef HRESULT(__stdcall* ResizeBuffers_t)(IDXGISwapChain* pSwapChain, UINT Buf
 
 static Present_t       oPresent       = NULL;
 static ResizeBuffers_t oResizeBuffers = NULL;
+
+// VMT hook state: we store the vtable pointer so we can restore on unload
+static void** s_swapChainVTable = NULL;
 
 static ID3D11Device*           pDevice              = NULL;
 static ID3D11DeviceContext*    pContext             = NULL;
@@ -97,7 +101,15 @@ static void CleanupResources() {
         Sleep(10);
     }
 
-    MH_DisableHook(MH_ALL_HOOKS);
+    // Restore VMT hooks
+    if (s_swapChainVTable && oPresent && oResizeBuffers) {
+        DWORD oldProtect = 0;
+        VirtualProtect(&s_swapChainVTable[8], sizeof(void*) * 6, PAGE_READWRITE, &oldProtect);
+        s_swapChainVTable[8]  = (void*)oPresent;
+        s_swapChainVTable[13] = (void*)oResizeBuffers;
+        VirtualProtect(&s_swapChainVTable[8], sizeof(void*) * 6, oldProtect, &oldProtect);
+        s_swapChainVTable = NULL;
+    }
     Sleep(100);
 
     if (g_hwnd && oWndProc) {
@@ -115,9 +127,6 @@ static void CleanupResources() {
     if (mainRenderTargetView) { mainRenderTargetView->Release(); mainRenderTargetView = NULL; }
     if (pContext)             { pContext->Release();             pContext             = NULL; }
     if (pDevice)              { pDevice->Release();              pDevice              = NULL; }
-
-    MH_RemoveHook(MH_ALL_HOOKS);
-    MH_Uninitialize();
 
     if (Runtime::g_csInitialized) {
         DeleteCriticalSection(&Runtime::g_espCs);
@@ -271,10 +280,10 @@ static void* ResolvePlayerRootClass() {
         return NULL;
     }
 
-    void* battleImage = IL2CPP::FindImage("_CombatMaster.Battle");
+    void* battleImage = IL2CPP::FindImage(ENC("_CombatMaster.Battle"));
     if (battleImage) {
         s_playerRootClass = IL2CPP::fn_class_from_name(battleImage,
-            "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
+            ENC("CombatMaster.Battle.Gameplay.Player"), ENC("PlayerRoot"));
         if (s_playerRootClass) return s_playerRootClass;
     }
 
@@ -287,7 +296,7 @@ static void* ResolvePlayerRootClass() {
         void* image = *(void**)assembly;
         if (!image) continue;
         s_playerRootClass = IL2CPP::fn_class_from_name(image,
-            "CombatMaster.Battle.Gameplay.Player", "PlayerRoot");
+            ENC("CombatMaster.Battle.Gameplay.Player"), ENC("PlayerRoot"));
         if (s_playerRootClass) return s_playerRootClass;
     }
     return NULL;
@@ -339,7 +348,7 @@ static void* ResolveGameClientClass() {
         if (!assembly) continue;
         void* image = *(void**)assembly;
         if (!image) continue;
-        s_gameClientClass = IL2CPP::fn_class_from_name(image, "CombatMaster.Client", "GameClient");
+        s_gameClientClass = IL2CPP::fn_class_from_name(image, ENC("CombatMaster.Client"), ENC("GameClient"));
         if (s_gameClientClass) return s_gameClientClass;
     }
     return NULL;
@@ -403,7 +412,7 @@ DWORD WINAPI MainThread(LPVOID /*p*/) {
     // 1. Wait for Project.dll, resolve IL2CPP
     HMODULE hProject = NULL;
     while (!hProject) {
-        hProject = GetModuleHandleA("Project.dll");
+        hProject = GetModuleHandleA(ENC("Project.dll"));
         if (!hProject) Sleep(500);
     }
     Log("Project.dll found at %p", hProject);
@@ -461,19 +470,39 @@ DWORD WINAPI MainThread(LPVOID /*p*/) {
     }
 
     void** pVTable = *reinterpret_cast<void***>(swapChain);
+
+    // Save originals before releasing the dummy swap chain
+    oPresent       = (Present_t)pVTable[8];
+    oResizeBuffers = (ResizeBuffers_t)pVTable[13];
+
     swapChain->Release();
     dummyDevice->Release();
     dummyContext->Release();
 
-    MH_Initialize();
-    MH_CreateHook(pVTable[8],  hkPresent,       (void**)&oPresent);
-    MH_CreateHook(pVTable[13], hkResizeBuffers, (void**)&oResizeBuffers);
-    MH_EnableHook(MH_ALL_HOOKS);
+    // Now find the REAL game swap chain's vtable and hook it.
+    // We need to get the actual game swapchain. The game's Present will be at
+    // the same virtual address, so we hook the vtable of the dummy to get the
+    // function address, then we need to hook the real one. However, since all
+    // IDXGISwapChain instances share the same vtable (same COM class), we can
+    // directly patch the vtable we just read — it IS the shared vtable.
+    s_swapChainVTable = pVTable;
+
+    DWORD oldProtect = 0;
+    VirtualProtect(&pVTable[8], sizeof(void*) * 6, PAGE_READWRITE, &oldProtect);
+    pVTable[8]  = (void*)hkPresent;
+    pVTable[13] = (void*)hkResizeBuffers;
+    VirtualProtect(&pVTable[8], sizeof(void*) * 6, oldProtect, &oldProtect);
+
+    Log("VMT hooks installed (Present=%p, ResizeBuffers=%p)", (void*)hkPresent, (void*)hkResizeBuffers);
 
     Runtime::g_dataThread = CreateThread(0, 0, ESP::DataThread, 0, 0, 0);
     Log("MainThread init finished, ESPDataThread started");
 
     Config::Load();
+
+    // Erase PE headers to prevent memory scanners from identifying this module
+    Stealth::ErasePEHeaders(Runtime::g_module);
+    Log("PE headers erased");
 
     return 0;
 }

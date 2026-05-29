@@ -330,21 +330,7 @@ static void RenderTabCosmetics() {
 // =====================================================================
 // Misc tab
 // =====================================================================
-//
-// Replaces the old Debug tab. The previous one leaked plenty of internals
-// the average user has no business seeing (raw class pointers, every
-// resolved IL2CPP method address, internal R/HP/Tr/OK counters, etc).
-//
-// What stays user-facing:
-//   - A single derived "Status" line: Ready / Waiting for match / etc.
-//   - Visible / hidden enemy counts (renamed from the dbg_ fields).
-//   - Trigger live state (Idle / Firing).
-//   - FPS overlay toggle (was misplaced under ESP > Filters).
-//   - Save Config + Unload buttons (were in the footer).
-//   - Resolved log path with Copy / Open Folder buttons.
-//
-// Anything diagnostic-but-noisy is now log-only; the log path is one
-// click away from the user when they need to send it.
+
 static const char* DeriveStatusLabel(ImVec4* outColor) {
     if (!GetModuleHandleA("Project.dll")) {
         if (outColor) *outColor = kSubtleText;
@@ -432,7 +418,7 @@ static void RenderTabMisc() {
 
     Widgets::SectionHeader("About");
     ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
-    ImGui::TextWrapped("Cm-Hax  -  Combat Master internal IL2CPP tooling. Educational project; loading into the live game violates the game's Terms of Service.");
+    ImGui::TextWrapped("Cm-Hax  -  Combat Master internal");
     ImGui::PopStyleColor();
 }
 
