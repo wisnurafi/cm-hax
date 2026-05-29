@@ -211,11 +211,13 @@ cl %COMMON_FLAGS% /LD ^
     "%ROOT%src\features\esp.cpp" ^
     "%ROOT%src\features\combat.cpp" ^
     "%ROOT%src\features\cosmetics.cpp" ^
+    "%ROOT%src\features\movement.cpp" ^
     "%ROOT%src\render\menu.cpp" ^
     "%ROOT%src\render\menu_style.cpp" ^
     "%ROOT%src\render\menu_widgets.cpp" ^
     "%ROOT%src\render\esp_render.cpp" ^
     "%ROOT%src\render\overlay.cpp" ^
+    "%ROOT%src\render\radar.cpp" ^
     "%ROOT%src\utils\math.cpp" ^
     "%ROOT%src\utils\memory.cpp" ^
     "%ROOT%src\utils\strings.cpp" ^

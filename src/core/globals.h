@@ -53,6 +53,17 @@ struct CmState {
     // Cosmetics
     bool  unlockAll = false;
 
+    // Radar
+    bool  radarEnabled = false;
+    float radarRadius  = 80.0f;   // circle radius in screen pixels
+    float radarScale   = 40.0f;   // world units per radar-radius (zoom)
+
+    // Movement
+    bool  bunnyhopEnabled        = false;
+    bool  infiniteSprintEnabled  = false;
+    bool  autoSlideCancelEnabled = false;
+    int   slideCancelFrames      = 8;     // frames of slide before auto-cancel
+
     // ESP colors (RGBA, 0..1)
     float colEnemy[4]    = { 1.00f, 0.28f, 0.28f, 0.96f };
     float colBot[4]      = { 1.00f, 0.70f, 0.26f, 0.92f };
@@ -94,12 +105,19 @@ namespace Runtime {
     extern HANDLE          g_singleInstanceMutex;
 
     // ESP collector output (data thread -> render thread). Guarded by g_espCs.
+    struct TeammateDot {
+        Vector3 pos;
+        bool    valid;
+    };
     struct SharedESPData {
         Matrix4x4  vMatrix;
         Matrix4x4  pMatrix;
         void*      camera;
+        Vector3    myPos;
         PlayerData players[64];
         int        playerCount;
+        TeammateDot teammates[64];
+        int        teammateCount;
         int        pR, pHP, pTr, pW2S;
     };
     extern SharedESPData     g_espData;

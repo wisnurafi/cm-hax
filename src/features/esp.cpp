@@ -8,6 +8,7 @@
 
 #include "esp.h"
 #include "combat.h"
+#include "movement.h"
 #include "../core/globals.h"
 #include "../core/hooks.h"
 #include "../core/logging.h"
@@ -47,7 +48,7 @@ DWORD WINAPI DataThread(LPVOID /*lpReserved*/) {
         // Collect data whenever any consumer needs it. Each consumer's own
         // toggle still gates whether it acts on the data; this just keeps
         // the snapshot fresh so triggerbot/aim can run with ESP visuals off.
-        bool anyConsumer = g_state.espEnabled || g_state.aimbotEnabled || g_state.triggerEnabled;
+        bool anyConsumer = g_state.espEnabled || g_state.aimbotEnabled || g_state.triggerEnabled || g_state.radarEnabled;
         if (!anyConsumer
             || !g_state.staticFields
             || !IL2CPP::fn_get_main_camera
@@ -72,8 +73,10 @@ DWORD WINAPI DataThread(LPVOID /*lpReserved*/) {
         bool haveMyTeam = Player::TryGetPlayerTeamId(myPlayer, myTeamId);
         Vector3 myPos = {};
         bool haveMyPos = Player::TryGetComponentPosition(myPlayer, myPos);
+        newData.myPos = myPos;
 
         Combat::ApplyWeaponPatches(myPlayer);
+        Movement::ApplyMovementPatches(myPlayer);
 
         void* camera = NULL;
         __try {
@@ -101,6 +104,15 @@ DWORD WINAPI DataThread(LPVOID /*lpReserved*/) {
                 if (g_state.teamCheck && haveMyTeam) {
                     int playerTeamId = -999;
                     if (Player::TryGetPlayerTeamId(player, playerTeamId) && playerTeamId == myTeamId) {
+                        // Teammate — collect position for radar, skip ESP processing.
+                        if (newData.teammateCount < 64) {
+                            Vector3 tmPos;
+                            if (Player::TryGetComponentPosition(player, tmPos)) {
+                                newData.teammates[newData.teammateCount].pos = tmPos;
+                                newData.teammates[newData.teammateCount].valid = true;
+                                newData.teammateCount++;
+                            }
+                        }
                         continue;
                     }
                 }

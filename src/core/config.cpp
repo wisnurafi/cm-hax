@@ -60,6 +60,17 @@ static CfgEntry g_entries[] = {
     { "trigger.activationMode",   CFG_INT,   &g_state.triggerActivationMode },
     { "trigger.activationKey",    CFG_INT,   &g_state.triggerActivationKey },
 
+    // Radar
+    { "radar.enabled",            CFG_BOOL,  &g_state.radarEnabled },
+    { "radar.radius",             CFG_FLOAT, &g_state.radarRadius },
+    { "radar.scale",              CFG_FLOAT, &g_state.radarScale },
+
+    // Movement
+    { "movement.bunnyhop",        CFG_BOOL,  &g_state.bunnyhopEnabled },
+    { "movement.infiniteSprint",  CFG_BOOL,  &g_state.infiniteSprintEnabled },
+    { "movement.autoSlideCancel", CFG_BOOL,  &g_state.autoSlideCancelEnabled },
+    { "movement.slideCancelFrames", CFG_INT, &g_state.slideCancelFrames },
+
     // Colors
     { "col.enemy",         CFG_COL4,  g_state.colEnemy },
     { "col.bot",           CFG_COL4,  g_state.colBot },
@@ -316,6 +327,16 @@ void Load() {
     if (g_state.triggerPrecision     > 2)    g_state.triggerPrecision = 2;
     if (g_state.triggerActivationMode < 0 || g_state.triggerActivationMode > 1) g_state.triggerActivationMode = 1;
     if (g_state.triggerActivationKey  < 0 || g_state.triggerActivationKey  > 255) g_state.triggerActivationKey = 0;
+
+    // Radar clamps.
+    if (g_state.radarRadius < 40.0f)  g_state.radarRadius = 40.0f;
+    if (g_state.radarRadius > 200.0f) g_state.radarRadius = 200.0f;
+    if (g_state.radarScale  < 10.0f)  g_state.radarScale  = 10.0f;
+    if (g_state.radarScale  > 200.0f) g_state.radarScale  = 200.0f;
+
+    // Movement clamps.
+    if (g_state.slideCancelFrames < 3)  g_state.slideCancelFrames = 3;
+    if (g_state.slideCancelFrames > 30) g_state.slideCancelFrames = 30;
 
     // Strip any hitbox bits we no longer expose (older configs may have them).
     g_state.aimbotHitboxMask &= HitboxValidMask();
