@@ -27,6 +27,7 @@
 #include "../render/menu_style.h"
 #include "../render/esp_render.h"
 #include "../render/overlay.h"
+#include "../render/radar.h"
 
 #pragma comment(lib, "d3d11.lib")
 
@@ -201,6 +202,10 @@ static HRESULT __stdcall hkPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval
 
     if (InterlockedCompareExchange(&Runtime::g_unloadRequested, 0, 0) == 0) {
         Overlay::Draw();
+    }
+
+    if (InterlockedCompareExchange(&Runtime::g_unloadRequested, 0, 0) == 0) {
+        Radar::Draw();
     }
 
     ImGui::Render();

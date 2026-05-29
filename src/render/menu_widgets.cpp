@@ -14,6 +14,20 @@ using MenuStyle::kAccentSoft;
 using MenuStyle::kCardBorder;
 using MenuStyle::kSubtleText;
 
+// ---- helpers ----------------------------------------------------------------
+
+// ImGui's ## convention: everything after ## is a hidden ID suffix and
+// shouldn't be displayed. Our custom widgets use the full label as the
+// InvisibleButton ID (which is correct) but must strip ## for display.
+static const char* DisplayEnd(const char* label) {
+    const char* p = label;
+    while (*p) {
+        if (p[0] == '#' && p[1] == '#') return p;
+        p++;
+    }
+    return p; // end of string
+}
+
 // ---- shared per-widget animation slots --------------------------------------
 // Each widget keys an animation by its label pointer. Cheap; ~64-128 slots
 // is plenty for the menu and labels are stable string literals.
@@ -98,7 +112,7 @@ bool Toggle(const char* label, bool* v) {
     ImGui::AlignTextToFramePadding();
     ImVec4 textCol = *v ? ImVec4(0.94f, 0.97f, 1.0f, 1.0f) : ImVec4(0.78f, 0.82f, 0.88f, 1.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, textCol);
-    ImGui::TextUnformatted(label);
+    ImGui::TextUnformatted(label, DisplayEnd(label));
     ImGui::PopStyleColor();
     return clicked;
 }

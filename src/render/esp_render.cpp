@@ -123,7 +123,7 @@ void Draw() {
     // or trigger is enabled. Individual visual elements (box, names, hp,
     // skeleton, snapline, fov circle) each gate themselves with their own
     // toggle, so toggling triggerbot on alone won't draw ESP visuals.
-    bool anyConsumer = g_state.espEnabled || g_state.aimbotEnabled || g_state.triggerEnabled;
+    bool anyConsumer = g_state.espEnabled || g_state.aimbotEnabled || g_state.triggerEnabled || g_state.radarEnabled;
     if (!anyConsumer) {
         Aim::ResetState();
         Trigger::OnFrame(false);

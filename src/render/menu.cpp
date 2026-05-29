@@ -83,11 +83,21 @@ static void RenderTabESP() {
     ImGui::ColorEdit4("HP Low",   g_state.colHpLow,    cf);
     ImGui::ColorEdit4("Armor",    g_state.colArmor,    cf);
     ImGui::Columns(1);
+
+    Widgets::SectionHeader("Radar");
+    Widgets::Toggle("Enable Radar", &g_state.radarEnabled);
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##radar_radius", &g_state.radarRadius, 40.0f, 200.0f, "Size   %.0f px");
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##radar_scale",  &g_state.radarScale,  10.0f, 200.0f, "Zoom   %.0f m");
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kMutedText, "Lower zoom = closer view. Higher zoom = wider area.");
+    ImGui::PopFont();
 }
 
 static void RenderTabAim() {
     Widgets::SectionHeader("Aimbot");
-    Widgets::Toggle("Enable",          &g_state.aimbotEnabled);
+    Widgets::Toggle("Enable Aimbot",   &g_state.aimbotEnabled);
     ImGui::SameLine(0.0f, 24.0f);
     Widgets::Toggle("Draw FOV Circle", &g_state.drawAimbotFov);
 
@@ -166,7 +176,7 @@ static void RenderTabAim() {
 
     // ---- Triggerbot ------------------------------------------------------
     Widgets::SectionHeader("Triggerbot");
-    Widgets::Toggle("Enable", &g_state.triggerEnabled);
+    Widgets::Toggle("Enable Triggerbot", &g_state.triggerEnabled);
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
     ImGui::PushFont(g_fontSmall);
@@ -264,6 +274,23 @@ static void RenderTabCombat() {
     ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
     ImGui::TextWrapped("Zeroes recoil/spread on the local weapon each frame. Disable before exiting a match for a cleaner restore.");
     ImGui::PopStyleColor();
+
+    Widgets::SectionHeader("Movement");
+    Widgets::Toggle("Bunny Hop",         &g_state.bunnyhopEnabled);
+    Widgets::Toggle("Infinite Sprint",   &g_state.infiniteSprintEnabled);
+    Widgets::Toggle("Auto Slide-Cancel", &g_state.autoSlideCancelEnabled);
+
+    if (g_state.autoSlideCancelEnabled) {
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::SliderInt("##slide_frames", &g_state.slideCancelFrames, 3, 30, "Cancel after %d frames");
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kMutedText, "Bunny Hop: auto-jump on landing while Space is held.");
+    ImGui::TextColored(kMutedText, "Infinite Sprint: stamina never depletes.");
+    ImGui::TextColored(kMutedText, "Slide-Cancel: auto-cancels slide into jump after N frames.");
+    ImGui::PopFont();
 }
 
 static void RenderTabCosmetics() {
