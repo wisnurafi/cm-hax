@@ -16,9 +16,8 @@ This repo exists as a learning resource for IL2CPP reverse engineering. See the
 | `dumper.cpp` -> `dumper.dll` | Internal IL2CPP dumper. Walks domain -> assemblies -> images -> classes -> fields/methods and writes a C#-style file. |
 | `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` hook + ImGui overlay). ESP, aimbot, no-recoil, no-spread, cosmetic byte patches. |
 | `CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
-| `il2cpp_dump.cs` | Sample dumper output: 21,079 classes / 141,505 methods / 95,267 fields. |
-| `imgui/`, `minhook/` | Vendored dependencies for the menu DLL. |
-| `third_party/imgui`, `third_party/minhook` | Vendored dependencies for the menu DLL. |
+| `il2cpp_dump.cs` (gitignored) | Latest dumper output: 21,079 classes / 141,505 methods / 95,267 fields. Re-inject `dumper.dll` to refresh. |
+| `third_party/imgui`, `third_party/minhook` | Vendored dependencies for the menu DLL (fetched by `build.bat setup`). |
 
 ## Source layout (`src/`)
 
@@ -53,7 +52,6 @@ src/
     memory.{cpp,h}            IsPlausiblePtr, BytePatch
     strings.{cpp,h}           Il2CppString -> UTF-8 helper
 ```
-> 38cbc64 (Refactor into modular src/ tree, add one-command build, scrub personal paths)
 
 ## How the IL2CPP API gets resolved
 
@@ -73,6 +71,9 @@ at runtime via `GetProcAddress(hProject, "<mangled>")`. A few examples:
 | `il2cpp_class_from_name` | `etIgYqMGBTj` |
 | `il2cpp_class_get_method_from_name` | `BfmNBPOFdWH` |
 | `il2cpp_type_get_name` | `ySfCbKcrsLP` |
+
+The full mapping lives in `dumper.cpp` (search for `RESOLVE(` in the
+`ResolveAPIs` function) and in `src/game/il2cpp.cpp::ResolveAll`.
 
 ## Requirements
 
