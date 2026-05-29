@@ -479,23 +479,24 @@ void Draw() {
     {
         ImVec2 a = winPos;
         ImVec2 b = ImVec2(winPos.x + winSize.x, winPos.y + kHeaderH);
-        ImU32 topCol    = ImGui::GetColorU32(ImVec4(0.054f, 0.068f, 0.090f, 1.0f));
-        ImU32 bottomCol = ImGui::GetColorU32(ImVec4(0.026f, 0.032f, 0.044f, 1.0f));
+
+        // Frosted glass header: translucent dark with subtle gradient
+        ImU32 topCol    = ImGui::GetColorU32(ImVec4(0.06f, 0.07f, 0.09f, 0.88f));
+        ImU32 bottomCol = ImGui::GetColorU32(ImVec4(0.04f, 0.045f, 0.06f, 0.92f));
         fg->AddRectFilledMultiColor(a, b, topCol, topCol, bottomCol, bottomCol);
 
-        ImU32 fadeStart = ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 0.45f));
-        ImU32 fadeEnd   = ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        fg->AddRectFilledMultiColor(
-            ImVec2(a.x, b.y - 4.0f), ImVec2(b.x, b.y),
-            fadeEnd, fadeEnd, fadeStart, fadeStart);
-
-        float pulseAlpha = 0.30f + 0.20f * pulse;
-        ImU32 ac0 = ImGui::ColorConvertFloat4ToU32(ImVec4(kAccent.x, kAccent.y, kAccent.z, pulseAlpha));
-        ImU32 ac1 = ImGui::GetColorU32(ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.0f));
+        // Bottom edge: soft luminous line (glass refraction effect)
+        ImU32 edgeLeft  = ImGui::ColorConvertFloat4ToU32(ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.20f + 0.08f * pulse));
+        ImU32 edgeMid   = ImGui::ColorConvertFloat4ToU32(ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.08f));
+        ImU32 edgeRight = ImGui::ColorConvertFloat4ToU32(ImVec4(0.22f, 0.26f, 0.32f, 0.15f));
         fg->AddRectFilledMultiColor(
             ImVec2(a.x, b.y - 1.0f),
-            ImVec2(a.x + 200.0f, b.y),
-            ac0, ac1, ac1, ac0);
+            ImVec2(a.x + winSize.x * 0.4f, b.y),
+            edgeLeft, edgeMid, edgeMid, edgeLeft);
+        fg->AddRectFilledMultiColor(
+            ImVec2(a.x + winSize.x * 0.4f, b.y - 1.0f),
+            ImVec2(b.x, b.y),
+            edgeMid, edgeRight, edgeRight, edgeMid);
     }
 
     // Brand
@@ -588,7 +589,7 @@ void Draw() {
     // ---- Body --------------------------------------------------------
     float bodyH = winSize.y - kHeaderH - kFooterH;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.020f, 0.024f, 0.034f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.04f, 0.045f, 0.06f, 0.70f));
     ImGui::BeginChild("##sidebar", ImVec2(kSidebarW, bodyH), false, ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleColor();
     ImGui::Dummy(ImVec2(0.0f, 14.0f));
@@ -609,13 +610,12 @@ void Draw() {
     ImGui::Unindent(14.0f);
     ImGui::EndChild();
 
-    // Soft divider
+    // Soft divider — frosted glass edge between sidebar and content
     {
         ImVec2 a = ImVec2(winPos.x + kSidebarW, winPos.y + kHeaderH);
-        ImVec2 b = ImVec2(a.x + 6.0f, winPos.y + kHeaderH + bodyH);
-        ImU32 leftCol  = ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.35f));
-        ImU32 rightCol = ImGui::GetColorU32(ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-        fg->AddRectFilledMultiColor(a, b, leftCol, rightCol, rightCol, leftCol);
+        ImVec2 b = ImVec2(a.x + 1.0f, winPos.y + kHeaderH + bodyH);
+        ImU32 divCol = ImGui::GetColorU32(ImVec4(0.22f, 0.26f, 0.32f, 0.20f));
+        fg->AddRectFilled(a, b, divCol);
     }
 
     ImGui::SameLine(0.0f, 0.0f);
@@ -646,18 +646,15 @@ void Draw() {
     {
         ImVec2 a = ImVec2(winPos.x, winPos.y + kHeaderH + bodyH);
         ImVec2 b = ImVec2(winPos.x + winSize.x, winPos.y + winSize.y);
-        ImU32 topCol    = ImGui::GetColorU32(ImVec4(0.030f, 0.036f, 0.048f, 1.0f));
-        ImU32 bottomCol = ImGui::GetColorU32(ImVec4(0.018f, 0.022f, 0.032f, 1.0f));
-        fg->AddRectFilledMultiColor(a, b, topCol, topCol, bottomCol, bottomCol);
-        fg->AddLine(ImVec2(a.x, a.y), ImVec2(b.x, a.y),
-                    ImGui::GetColorU32(ImGuiCol_Border), 1.0f);
 
-        ImU32 ac0 = ImGui::GetColorU32(ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.0f));
-        ImU32 ac1 = ImGui::ColorConvertFloat4ToU32(ImVec4(kAccent.x, kAccent.y, kAccent.z, 0.20f));
-        fg->AddRectFilledMultiColor(
-            ImVec2(b.x - 280.0f, a.y),
-            ImVec2(b.x, a.y + 1.0f),
-            ac0, ac1, ac1, ac0);
+        // Frosted glass footer
+        ImU32 topCol    = ImGui::GetColorU32(ImVec4(0.05f, 0.055f, 0.07f, 0.85f));
+        ImU32 bottomCol = ImGui::GetColorU32(ImVec4(0.035f, 0.04f, 0.055f, 0.90f));
+        fg->AddRectFilledMultiColor(a, b, topCol, topCol, bottomCol, bottomCol);
+
+        // Top edge: luminous glass border
+        ImU32 edgeCol = ImGui::ColorConvertFloat4ToU32(ImVec4(0.22f, 0.26f, 0.32f, 0.25f));
+        fg->AddLine(ImVec2(a.x, a.y), ImVec2(b.x, a.y), edgeCol, 1.0f);
     }
 
     // Hotkeys + cfg status. Save / Unload buttons live on the Misc tab now.
