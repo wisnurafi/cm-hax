@@ -2,6 +2,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -213,12 +214,47 @@ static void RenderTabDebug() {
     Widgets::SectionHeader("Module");
     ImGui::Text("Project.dll:  %p", GetModuleHandleA("Project.dll"));
     ImGui::Text("StaticFields: %p", g_state.staticFields);
+    ImGui::Text("GameClient:   %p", g_state.gameClientStaticFields);
+
+    Widgets::SectionHeader("Log file");
+    const char* logPath = LogPath();
+    ImGui::TextWrapped("%s", logPath ? logPath : "(no writable location found)");
+    if (logPath) {
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        if (ImGui::Button("Copy path", ImVec2(110.0f, 0.0f))) {
+            ImGui::SetClipboardText(logPath);
+        }
+        ImGui::SameLine(0.0f, 8.0f);
+        if (ImGui::Button("Open folder", ImVec2(110.0f, 0.0f))) {
+            char folder[MAX_PATH];
+            strncpy(folder, logPath, sizeof(folder) - 1);
+            folder[sizeof(folder) - 1] = '\0';
+            char* slash = strrchr(folder, '\\');
+            if (slash) {
+                *slash = '\0';
+                ShellExecuteA(NULL, "open", folder, NULL, NULL, SW_SHOWNORMAL);
+            }
+        }
+    }
+
+    Widgets::SectionHeader("Resolved IL2CPP exports");
+    ImGui::Text("domain_get:                  %p", (void*)IL2CPP::fn_domain_get);
+    ImGui::Text("thread_attach:               %p", (void*)IL2CPP::fn_thread_attach);
+    ImGui::Text("class_from_name:             %p", (void*)IL2CPP::fn_class_from_name);
+    ImGui::Text("domain_get_assemblies:       %p", (void*)IL2CPP::fn_domain_get_assemblies);
+    ImGui::Text("class_get_method_from_name:  %p", (void*)IL2CPP::fn_class_get_method_from_name);
 
     Widgets::SectionHeader("Resolved methods");
-    ImGui::Text("Camera.get_main:        %p", (void*)IL2CPP::fn_get_main_camera);
-    ImGui::Text("Camera.WorldToScreen:   %p", (void*)IL2CPP::fn_WorldToScreenPoint);
-    ImGui::Text("PlayerRoot.get_TeamId:  %p", (void*)IL2CPP::fn_playerroot_get_teamid);
-    ImGui::Text("PlayerRoot.get_IsVis.:  %p", (void*)IL2CPP::fn_playerroot_get_is_visible);
+    ImGui::Text("Camera.get_main:             %p", (void*)IL2CPP::fn_get_main_camera);
+    ImGui::Text("Camera.get_worldToCamera:    %p", (void*)IL2CPP::fn_get_worldToCamera);
+    ImGui::Text("Camera.get_projectionMatrix: %p", (void*)IL2CPP::fn_get_projectionMatrix);
+    ImGui::Text("Camera.WorldToScreenPoint:   %p", (void*)IL2CPP::fn_WorldToScreenPoint);
+    ImGui::Text("Component.get_transform:     %p", (void*)IL2CPP::fn_component_get_transform);
+    ImGui::Text("Transform.get_position:      %p", (void*)IL2CPP::fn_get_position);
+    ImGui::Text("PlayerRoot.get_TeamId:       %p", (void*)IL2CPP::fn_playerroot_get_teamid);
+    ImGui::Text("PlayerRoot.get_IsVisible:    %p", (void*)IL2CPP::fn_playerroot_get_is_visible);
+    ImGui::Text("PlayerHealth.get_IsDead:     %p", (void*)IL2CPP::fn_playerhealth_get_is_dead);
+    ImGui::Text("PlayerHealth.get_IsDowned:   %p", (void*)IL2CPP::fn_playerhealth_get_is_downed);
 
     Widgets::SectionHeader("Counters");
     ImGui::Text("Players  R:%d  HP:%d  Tr:%d  OK:%d",
