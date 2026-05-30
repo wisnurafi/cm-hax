@@ -4,11 +4,14 @@
 // Compile: cl /EHsc /O2 injector.cpp /link /OUT:injector.exe advapi32.lib
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 #include <tlhelp32.h>
 #include <stdio.h>
 #include <string.h>
 
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "user32.lib")
 
 // ================================================================
 // Structures
@@ -525,22 +528,89 @@ int main(int argc, char* argv[]) {
     printf("\n");
 
     const char* procName = "CombatMaster.exe";
-    printf("[*] Waiting for %s...\n", procName);
-    printf("[*] Launch the game now!\n\n");
 
-    DWORD pid = 0;
-    while (!pid) {
-        pid = FindProcess(procName);
-        if (!pid) {
-            Sleep(100);
+    // Check if game is already running
+    DWORD pid = FindProcess(procName);
+    if (!pid) {
+        // Make sure Steam is open
+        DWORD steamPid = FindProcess("steam.exe");
+        if (!steamPid) {
+            printf("[*] Opening Steam...\n");
+            char steamPath[MAX_PATH] = {};
+            DWORD steamPathLen = sizeof(steamPath);
+            HKEY hKey = NULL;
+            if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Valve\\Steam", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+                if (RegQueryValueExA(hKey, "SteamExe", NULL, NULL, (LPBYTE)steamPath, &steamPathLen) == ERROR_SUCCESS) {
+                    ShellExecuteA(NULL, "open", steamPath, NULL, NULL, SW_SHOWDEFAULT);
+                }
+                RegCloseKey(hKey);
+            }
+            printf("[*] Waiting for Steam...\n");
+            while (!steamPid) {
+                steamPid = FindProcess("steam.exe");
+                if (!steamPid) Sleep(500);
+            }
+            printf("[+] Steam is ready.\n\n");
+            Sleep(3000);
+        } else {
+            // Steam is running but might be minimized — use steam:// protocol
+            // to force the library window open (this always brings Steam to front)
+            ShellExecuteA(NULL, "open", "steam://open/games/details/2105420", NULL, NULL, SW_SHOWDEFAULT);
+            Sleep(1000);
         }
+
+        printf("[*] Now press PLAY on Combat Master in Steam.\n");
+        printf("[*] Waiting for %s...\n", procName);
+        printf("[*] HWID spoof activates automatically before login.\n\n");
+
+        while (!pid) {
+            pid = FindProcess(procName);
+            if (!pid) Sleep(100);
+        }
+    } else {
+        printf("[*] %s already running.\n", procName);
     }
 
     printf("[+] Found %s (PID: %lu)\n", procName, pid);
 
-    // Wait for process to initialize
-    printf("[*] Waiting 3 seconds for process initialization...\n");
-    Sleep(3000);
+    // Wait for Project.dll to be loaded in the target process.
+    // This ensures the game's IL2CPP runtime is mapped before we inject.
+    printf("[*] Waiting for Project.dll to load...\n");
+    {
+        HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+        if (!hProc) {
+            // Fallback to fixed wait if we can't open the process yet
+            printf("[*] Can't query process, waiting 5 seconds...\n");
+            Sleep(5000);
+        } else {
+            bool found = false;
+            for (int attempt = 0; attempt < 120; attempt++) { // 60 seconds max
+                HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+                if (snap != INVALID_HANDLE_VALUE) {
+                    MODULEENTRY32 me;
+                    me.dwSize = sizeof(me);
+                    if (Module32First(snap, &me)) {
+                        do {
+                            if (_stricmp(me.szModule, "Project.dll") == 0) {
+                                found = true;
+                                break;
+                            }
+                        } while (Module32Next(snap, &me));
+                    }
+                    CloseHandle(snap);
+                }
+                if (found) break;
+                Sleep(500);
+            }
+            CloseHandle(hProc);
+            if (found) {
+                printf("[+] Project.dll detected! Waiting for initialization...\n");
+                Sleep(3000); // Wait for DLL to fully initialize its exports
+            } else {
+                printf("[!] Timed out waiting for Project.dll (60s). Attempting injection anyway...\n");
+            }
+        }
+    }
 
     // Inject
     if (ManualMapInject(pid, dllPath)) {

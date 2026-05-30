@@ -22,6 +22,8 @@
 
 #include "../features/esp.h"
 #include "../features/cosmetics.h"
+#include "../features/combat.h"
+#include "../features/exploit.h"
 #include "../utils/stealth.h"
 
 #include "../render/menu.h"
@@ -86,8 +88,13 @@ static void CleanupResources() {
     g_state.espEnabled = false;
     g_state.noRecoil   = false;
     g_state.noSpread   = false;
+    g_state.noShake    = false;
     Cosmetics::RestoreUnlockAll();
+    Cosmetics::RestoreMaxLevel();
+    Combat::RestoreNoShake();
+    Exploit::RestoreHWIDSpoof();
     g_state.unlockAll = false;
+    g_state.maxLevelWeapons = false;
     InterlockedExchange(&Runtime::g_running, 0);
 
     if (Runtime::g_dataThread) {
@@ -416,6 +423,18 @@ DWORD WINAPI MainThread(LPVOID /*p*/) {
         if (!hProject) Sleep(500);
     }
     Log("Project.dll found at %p", hProject);
+
+    // Wait a bit for Project.dll to fully initialize (relocations, etc.)
+    Sleep(2000);
+
+    // Apply HWID spoof immediately — before IL2CPP resolves and before
+    // PlayFab login can query the real device ID. Retry a few times if
+    // the memory isn't ready yet.
+    for (int attempt = 0; attempt < 5; attempt++) {
+        Exploit::ApplyHWIDSpoof();
+        if (Exploit::IsHWIDSpoofActive()) break;
+        Sleep(1000);
+    }
 
     if (!IL2CPP::ResolveAll(hProject)) return 1;
 

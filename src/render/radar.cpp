@@ -29,16 +29,37 @@ void Draw() {
 
     if (localData.playerCount == 0) return;
 
-    ImDrawList* drawList = ImGui::GetForegroundDrawList();
-    ImGuiIO& io = ImGui::GetIO();
-
     float radius = g_state.radarRadius;
     float scale  = g_state.radarScale;
+    float windowSize = radius * 2.0f + 24.0f;
 
-    // Position: top-right corner with padding
-    float padding = 16.0f;
-    float cx = io.DisplaySize.x - radius - padding;
-    float cy = radius + padding + 40.0f;
+    // Draggable ImGui window with no background (we draw our own circle)
+    ImGui::SetNextWindowSize(ImVec2(windowSize, windowSize + 20.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar
+                           | ImGuiWindowFlags_NoResize
+                           | ImGuiWindowFlags_NoScrollbar
+                           | ImGuiWindowFlags_NoSavedSettings
+                           | ImGuiWindowFlags_NoFocusOnAppearing
+                           | ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+    // Minimal styling for the radar window
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
+
+    if (!ImGui::Begin("##radar_window", nullptr, flags)) {
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
+
+    ImVec2 winPos = ImGui::GetWindowPos();
+    float cx = winPos.x + windowSize * 0.5f;
+    float cy = winPos.y + windowSize * 0.5f + 10.0f;
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
 
     // Background circle
     ImU32 bgColor     = ImGui::ColorConvertFloat4ToU32(ImVec4(0.02f, 0.025f, 0.035f, 0.75f));
@@ -133,6 +154,10 @@ void Draw() {
             MenuStyle::kAccent.x, MenuStyle::kAccent.y, MenuStyle::kAccent.z, 0.7f)),
         label);
     ImGui::PopFont();
+
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
 }
 
 } // namespace Radar

@@ -20,16 +20,22 @@ struct CmState {
     bool  espNames     = true;
     bool  espDistance  = true;
     bool  espSkeleton  = true;
+    bool  espHead      = true;
     bool  visibleCheck = true;
     bool  teamCheck    = true;
     bool  showFpsOverlay = true;
+    int   espBoxStyle    = 1;     // 0 = Standard, 1 = Corner, 2 = Filled
+    float espBoxThickness = 1.8f; // box line thickness
 
     // Aim
     bool  aimbotEnabled  = true;
     bool  drawAimbotFov  = true;
     float aimbotFov      = 250.0f;
     float aimbotSmooth   = 3.0f;
+    float adsMultiplier  = 1.5f;   // smooth multiplier when ADS is active
     int   aimbotHitboxMask = 1; // HITBOX_HEAD by default
+    int   aimTargetMethod  = 0; // 0 = Sticky, 1 = Human
+    float colAimbotFov[4]  = { 1.00f, 1.00f, 1.00f, 0.37f };
 
     // Activation. 0 = Always Active, 1 = Hold Key.
     // Default key is RMB to preserve previous "hold RMB to aim" behavior.
@@ -39,24 +45,35 @@ struct CmState {
     // Combat
     bool  noRecoil = false;
     bool  noSpread = false;
+    bool  noShake  = false;
 
     // Triggerbot. Off-by-default with no key bound, so a fresh install can't
     // fire on its own. The renderer fills triggerCrosshairOnTarget once per
     // frame; the trigger state machine reads it from there.
     bool  triggerEnabled        = false;
+    bool  drawTriggerFov       = false;
+    float triggerFov           = 0.0f;    // 0 = use bbox detection, >0 = circle FOV
     int   triggerHoldMs         = 25;     // LEFTDOWN -> LEFTUP duration
     int   triggerRefireMs       = 80;     // gap between clicks
     int   triggerPrecision      = 1;      // 0 = Precise, 1 = Balanced, 2 = Aggressive
     int   triggerActivationMode = 1;      // 0 = Always, 1 = Hold
     int   triggerActivationKey  = 0;      // VK; 0 = unbound
+    float colTriggerFov[4]     = { 0.28f, 1.00f, 0.28f, 0.37f };
 
     // Cosmetics
     bool  unlockAll = false;
+    bool  maxLevelWeapons = false;
 
     // Radar
     bool  radarEnabled = false;
     float radarRadius  = 80.0f;   // circle radius in screen pixels
     float radarScale   = 40.0f;   // world units per radar-radius (zoom)
+
+    // Out-of-FOV Arrows
+    bool  oofEnabled       = false;
+    float oofMaxDistance    = 150.0f;  // max world distance to show arrows
+    float oofCircleRadius  = 100.0f;  // arrow circle radius in screen pixels
+    float colOofArrow[4]   = { 1.00f, 0.28f, 0.28f, 0.90f };
 
     // Movement
     bool  bunnyhopEnabled        = false;

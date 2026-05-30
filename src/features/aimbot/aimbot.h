@@ -10,6 +10,11 @@ namespace Aim {
         ACT_HOLD   = 1,
     };
 
+    enum TargetMethod {
+        TGT_STICKY = 0,  // Lock first target, don't switch until dead/off-screen
+        TGT_HUMAN  = 1,  // Allow switching with cooldown + inertia
+    };
+
     void ResetState();
 
     // True when the user's activation gate is currently satisfied. Always true
@@ -28,4 +33,11 @@ namespace Aim {
     float TargetX();
     float TargetY();
     void  SetTarget(float x, float y);
+
+    // Target persistence: tracks which player index is currently locked.
+    // Used by the renderer to prevent flicking between targets.
+    void  SetLockedTargetIndex(int idx);
+    int   GetLockedTargetIndex();
+    bool  CanSwitchTarget();  // Returns true if cooldown has elapsed (Human mode)
+    void  NotifyTargetSwitch(); // Resets the switch cooldown timer
 }

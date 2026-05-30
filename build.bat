@@ -173,6 +173,7 @@ cl %COMMON_FLAGS% /LD ^
     "%ROOT%src\features\esp.cpp" ^
     "%ROOT%src\features\combat.cpp" ^
     "%ROOT%src\features\cosmetics.cpp" ^
+    "%ROOT%src\features\exploit.cpp" ^
     "%ROOT%src\features\movement.cpp" ^
     "%ROOT%src\render\menu.cpp" ^
     "%ROOT%src\render\menu_style.cpp" ^

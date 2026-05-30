@@ -18,6 +18,8 @@
 #include "../features/aimbot/hitbox.h"
 #include "../features/triggerbot/triggerbot.h"
 #include "../features/cosmetics.h"
+#include "../features/combat.h"
+#include "../features/exploit.h"
 #include "../utils/math.h"
 #include "../utils/input.h"
 
@@ -35,10 +37,11 @@ struct TabSpec {
 };
 
 static const TabSpec g_tabs[TAB_COUNT] = {
-    { "ESP",       "Visuals",       Widgets::GLYPH_ESP },
+    { "Visuals",   "ESP & arrows",  Widgets::GLYPH_ESP },
     { "Aim",       "Targeting",     Widgets::GLYPH_AIM },
     { "Combat",    "Recoil/spread", Widgets::GLYPH_COMBAT },
     { "Cosmetics", "Unlocks/save",  Widgets::GLYPH_COSMETICS },
+    { "Exploit",   "Bypasses",      Widgets::GLYPH_EXPLOIT },
     { "Misc",      "Tools & info",  Widgets::GLYPH_MISC },
 };
 
@@ -59,7 +62,17 @@ static void RenderTabESP() {
     Widgets::Toggle("Health",    &g_state.espHealth);
     Widgets::Toggle("Armor",     &g_state.espArmor);
     Widgets::Toggle("Snaplines", &g_state.espLines);
+    Widgets::Toggle("Head",      &g_state.espHead);
     ImGui::Columns(1);
+
+    if (g_state.espBox) {
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
+        static const char* boxStyles[] = { "Standard", "Corner", "Filled" };
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::Combo("##box_style", &g_state.espBoxStyle, boxStyles, 3);
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::SliderFloat("##box_thick", &g_state.espBoxThickness, 0.5f, 4.0f, "Thickness %.1f");
+    }
 
     Widgets::SectionHeader("Filters");
     Widgets::Toggle("Team Check",    &g_state.teamCheck);
@@ -93,6 +106,17 @@ static void RenderTabESP() {
     ImGui::PushFont(g_fontSmall);
     ImGui::TextColored(kMutedText, "Lower zoom = closer view. Higher zoom = wider area.");
     ImGui::PopFont();
+
+    Widgets::SectionHeader("Out-of-FOV Arrows");
+    Widgets::Toggle("Enable OOF Arrows", &g_state.oofEnabled);
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##oof_distance", &g_state.oofMaxDistance, 10.0f, 500.0f, "Max Distance   %.0f m");
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##oof_radius", &g_state.oofCircleRadius, 40.0f, 400.0f, "Arrow Circle Radius   %.0f px");
+    ImGuiColorEditFlags cf2 = ImGuiColorEditFlags_AlphaBar
+                            | ImGuiColorEditFlags_AlphaPreviewHalf
+                            | ImGuiColorEditFlags_NoInputs;
+    ImGui::ColorEdit4("Arrow Color", g_state.colOofArrow, cf2);
 }
 
 static void RenderTabAim() {
@@ -107,6 +131,13 @@ static void RenderTabAim() {
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::SliderFloat("##smooth", &g_state.aimbotSmooth, 1.0f, 15.0f, "Smooth %.1f");
     if (g_state.aimbotSmooth < 1.0f) g_state.aimbotSmooth = 1.0f;
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##ads_mult", &g_state.adsMultiplier, 1.0f, 5.0f, "ADS Multiplier %.1fx");
+    if (g_state.adsMultiplier < 1.0f) g_state.adsMultiplier = 1.0f;
+    if (g_state.drawAimbotFov) {
+        ImGuiColorEditFlags cfAim = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf | ImGuiColorEditFlags_NoInputs;
+        ImGui::ColorEdit4("FOV Color", g_state.colAimbotFov, cfAim);
+    }
 
     Widgets::SectionHeader("Activation");
     {
@@ -153,6 +184,29 @@ static void RenderTabAim() {
     Widgets::PillBitmaskRow("hitboxes", &g_state.aimbotHitboxMask,
                             kPills, (int)(sizeof(kPills) / sizeof(kPills[0])));
 
+    Widgets::SectionHeader("Target Method");
+    {
+        static const Widgets::PillItem kSticky[] = { { 1, "Sticky" } };
+        static const Widgets::PillItem kHuman[]  = { { 1, "Human"  } };
+
+        int stickyMask = (g_state.aimTargetMethod == Aim::TGT_STICKY) ? 1 : 0;
+        int humanMask  = (g_state.aimTargetMethod == Aim::TGT_HUMAN)  ? 1 : 0;
+        if (Widgets::PillBitmaskRow("tgt_sticky", &stickyMask, kSticky, 1)) {
+            g_state.aimTargetMethod = Aim::TGT_STICKY;
+        }
+        ImGui::SameLine(0.0f, 8.0f);
+        if (Widgets::PillBitmaskRow("tgt_human", &humanMask, kHuman, 1)) {
+            g_state.aimTargetMethod = Aim::TGT_HUMAN;
+        }
+        ImGui::PushFont(g_fontSmall);
+        if (g_state.aimTargetMethod == Aim::TGT_STICKY) {
+            ImGui::TextColored(kSubtleText, "Locks first target. Won't switch until dead or off-screen.");
+        } else {
+            ImGui::TextColored(kSubtleText, "Allows switching to closer targets with cooldown.");
+        }
+        ImGui::PopFont();
+    }
+
     int selected = CountHitboxBits(g_state.aimbotHitboxMask);
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     ImGui::PushFont(g_fontSmall);
@@ -177,8 +231,21 @@ static void RenderTabAim() {
     // ---- Triggerbot ------------------------------------------------------
     Widgets::SectionHeader("Triggerbot");
     Widgets::Toggle("Enable Triggerbot", &g_state.triggerEnabled);
+    ImGui::SameLine(0.0f, 24.0f);
+    Widgets::Toggle("Draw Trigger FOV", &g_state.drawTriggerFov);
 
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##trigger_fov", &g_state.triggerFov, 0.0f, 400.0f, g_state.triggerFov > 0.0f ? "Trigger FOV   %.0f" : "Trigger FOV   Off");
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kSubtleText, "0 = use bounding box detection. >0 = circle FOV radius.");
+    ImGui::PopFont();
+    if (g_state.drawTriggerFov && g_state.triggerFov > 0.0f) {
+        ImGuiColorEditFlags cfTrig = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf | ImGuiColorEditFlags_NoInputs;
+        ImGui::ColorEdit4("Trigger FOV Color", g_state.colTriggerFov, cfTrig);
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
     ImGui::PushFont(g_fontSmall);
     ImGui::TextColored(kSubtleText, "Precision");
     ImGui::PopFont();
@@ -269,10 +336,18 @@ static void RenderTabCombat() {
     Widgets::SectionHeader("Weapon");
     Widgets::Toggle("No Recoil", &g_state.noRecoil);
     Widgets::Toggle("No Spread", &g_state.noSpread);
+    {
+        bool prevShake = g_state.noShake;
+        Widgets::Toggle("No Camera Shake", &g_state.noShake);
+        if (prevShake != g_state.noShake) {
+            if (g_state.noShake) Combat::ApplyNoShake();
+            else                 Combat::RestoreNoShake();
+        }
+    }
 
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
-    ImGui::TextWrapped("Zeroes recoil/spread on the local weapon each frame. Disable before exiting a match for a cleaner restore.");
+    ImGui::TextWrapped("Zeroes recoil/spread on the local weapon each frame. No Camera Shake patches the damage shake animation.");
     ImGui::PopStyleColor();
 
     Widgets::SectionHeader("Movement");
@@ -305,6 +380,16 @@ static void RenderTabCosmetics() {
     if (Cosmetics::IsUnlockActive()) Widgets::HeaderPill("ACTIVE", kSuccess);
     else                             Widgets::HeaderPill("OFF",    kSubtleText);
 
+    bool prevMaxLvl = g_state.maxLevelWeapons;
+    Widgets::Toggle("Max Level Weapons", &g_state.maxLevelWeapons);
+    if (prevMaxLvl != g_state.maxLevelWeapons) {
+        if (g_state.maxLevelWeapons) Cosmetics::ApplyMaxLevel();
+        else                         Cosmetics::RestoreMaxLevel();
+    }
+    ImGui::SameLine(0.0f, 12.0f);
+    if (Cosmetics::IsMaxLevelActive()) Widgets::HeaderPill("ACTIVE", kSuccess);
+    else                               Widgets::HeaderPill("OFF",    kSubtleText);
+
     ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
     ImGui::TextWrapped("Patches all Is*Available checks to true. Equip what you want, then save to keep it.");
     ImGui::PopStyleColor();
@@ -325,6 +410,37 @@ static void RenderTabCosmetics() {
         ImGui::TextWrapped("GameClient static fields not resolved yet. Wait for the main menu / match to fully load.");
         ImGui::PopStyleColor();
     }
+}
+
+// =====================================================================
+// Exploit tab
+// =====================================================================
+
+static void RenderTabExploit() {
+    Widgets::SectionHeader("Ban Bypass");
+
+    // HWID Spoof is auto-enabled on inject — no toggle needed
+    ImGui::Text("HWID Spoof");
+    ImGui::SameLine(0.0f, 12.0f);
+    if (Exploit::IsHWIDSpoofActive()) Widgets::HeaderPill("ACTIVE", kSuccess);
+    else                              Widgets::HeaderPill("FAILED", kDanger);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, kMutedText);
+    ImGui::TextWrapped("Automatically spoofs SystemInfo.deviceUniqueIdentifier on inject. The server sees a randomized hardware ID instead of your real one.");
+    ImGui::PopStyleColor();
+
+    if (Exploit::IsHWIDSpoofActive()) {
+        ImGui::Dummy(ImVec2(0.0f, 6.0f));
+        ImGui::PushFont(g_fontSmall);
+        ImGui::TextColored(kAccent, "Spoofed ID: %s", Exploit::GetSpoofedID());
+        ImGui::PopFont();
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kSubtleText, "A new random ID is generated each session.");
+    ImGui::TextColored(kSubtleText, "The spoof activates before PlayFab login, so the server never sees your real HWID.");
+    ImGui::PopFont();
 }
 
 // =====================================================================
@@ -428,6 +544,7 @@ static void RenderActiveTab() {
         case TAB_AIM:        RenderTabAim();        break;
         case TAB_COMBAT:     RenderTabCombat();     break;
         case TAB_COSMETICS:  RenderTabCosmetics();  break;
+        case TAB_EXPLOIT:    RenderTabExploit();    break;
         case TAB_MISC:       RenderTabMisc();       break;
         default:             RenderTabESP();        break;
     }

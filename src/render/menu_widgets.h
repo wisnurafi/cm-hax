@@ -27,6 +27,7 @@ namespace Widgets {
         GLYPH_AIM,
         GLYPH_COMBAT,
         GLYPH_COSMETICS,
+        GLYPH_EXPLOIT,
         GLYPH_MISC,
     };
     bool SidebarButton(const char* label, int glyph, bool active);

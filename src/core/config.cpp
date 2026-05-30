@@ -29,12 +29,15 @@ static CfgEntry g_entries[] = {
     // ESP
     { "esp.enabled",       CFG_BOOL,  &g_state.espEnabled },
     { "esp.box",           CFG_BOOL,  &g_state.espBox },
+    { "esp.boxStyle",      CFG_INT,   &g_state.espBoxStyle },
+    { "esp.boxThickness",  CFG_FLOAT, &g_state.espBoxThickness },
     { "esp.health",        CFG_BOOL,  &g_state.espHealth },
     { "esp.armor",         CFG_BOOL,  &g_state.espArmor },
     { "esp.lines",         CFG_BOOL,  &g_state.espLines },
     { "esp.names",         CFG_BOOL,  &g_state.espNames },
     { "esp.distance",      CFG_BOOL,  &g_state.espDistance },
     { "esp.skeleton",      CFG_BOOL,  &g_state.espSkeleton },
+    { "esp.head",          CFG_BOOL,  &g_state.espHead },
     { "esp.visibleCheck",  CFG_BOOL,  &g_state.visibleCheck },
     { "esp.teamCheck",     CFG_BOOL,  &g_state.teamCheck },
     { "ui.fpsOverlay",     CFG_BOOL,  &g_state.showFpsOverlay },
@@ -44,6 +47,9 @@ static CfgEntry g_entries[] = {
     { "aim.drawFov",       CFG_BOOL,  &g_state.drawAimbotFov },
     { "aim.fov",           CFG_FLOAT, &g_state.aimbotFov },
     { "aim.smooth",        CFG_FLOAT, &g_state.aimbotSmooth },
+    { "aim.adsMultiplier", CFG_FLOAT, &g_state.adsMultiplier },
+    { "aim.targetMethod",  CFG_INT,   &g_state.aimTargetMethod },
+    { "col.aimbotFov",     CFG_COL4,  g_state.colAimbotFov },
     { "aim.hitboxMask",    CFG_INT,   &g_state.aimbotHitboxMask },
     { "aim.activationMode",CFG_INT,   &g_state.aimActivationMode },
     { "aim.activationKey", CFG_INT,   &g_state.aimActivationKey },
@@ -51,19 +57,29 @@ static CfgEntry g_entries[] = {
     // Combat
     { "combat.noRecoil",   CFG_BOOL,  &g_state.noRecoil },
     { "combat.noSpread",   CFG_BOOL,  &g_state.noSpread },
+    { "combat.noShake",    CFG_BOOL,  &g_state.noShake },
 
     // Triggerbot
     { "trigger.enabled",          CFG_BOOL,  &g_state.triggerEnabled },
+    { "trigger.drawFov",          CFG_BOOL,  &g_state.drawTriggerFov },
+    { "trigger.fov",              CFG_FLOAT, &g_state.triggerFov },
     { "trigger.holdMs",           CFG_INT,   &g_state.triggerHoldMs },
     { "trigger.refireMs",         CFG_INT,   &g_state.triggerRefireMs },
     { "trigger.precision",        CFG_INT,   &g_state.triggerPrecision },
     { "trigger.activationMode",   CFG_INT,   &g_state.triggerActivationMode },
     { "trigger.activationKey",    CFG_INT,   &g_state.triggerActivationKey },
+    { "col.triggerFov",           CFG_COL4,  g_state.colTriggerFov },
 
     // Radar
     { "radar.enabled",            CFG_BOOL,  &g_state.radarEnabled },
     { "radar.radius",             CFG_FLOAT, &g_state.radarRadius },
     { "radar.scale",              CFG_FLOAT, &g_state.radarScale },
+
+    // Out-of-FOV Arrows
+    { "oof.enabled",              CFG_BOOL,  &g_state.oofEnabled },
+    { "oof.maxDistance",           CFG_FLOAT, &g_state.oofMaxDistance },
+    { "oof.circleRadius",          CFG_FLOAT, &g_state.oofCircleRadius },
+    { "col.oofArrow",             CFG_COL4,  g_state.colOofArrow },
 
     // Movement
     { "movement.bunnyhop",        CFG_BOOL,  &g_state.bunnyhopEnabled },
@@ -312,11 +328,14 @@ void Load() {
     // Sanity clamps after load.
     if (g_state.aimbotSmooth < 1.0f)  g_state.aimbotSmooth = 1.0f;
     if (g_state.aimbotSmooth > 15.0f) g_state.aimbotSmooth = 15.0f;
+    if (g_state.adsMultiplier < 1.0f) g_state.adsMultiplier = 1.0f;
+    if (g_state.adsMultiplier > 5.0f) g_state.adsMultiplier = 5.0f;
     if (g_state.aimbotFov    < 25.0f) g_state.aimbotFov = 25.0f;
     if (g_state.aimbotFov    > 600.0f) g_state.aimbotFov = 600.0f;
     if (g_state.activeTab < 0 || g_state.activeTab > 4) g_state.activeTab = 0;
     if (g_state.aimActivationMode < 0 || g_state.aimActivationMode > 1) g_state.aimActivationMode = 1;
     if (g_state.aimActivationKey  < 0 || g_state.aimActivationKey  > 255) g_state.aimActivationKey = 0;
+    if (g_state.aimTargetMethod < 0 || g_state.aimTargetMethod > 1) g_state.aimTargetMethod = 0;
 
     // Trigger clamps mirror the slider ranges.
     if (g_state.triggerHoldMs        < 5)    g_state.triggerHoldMs = 5;
