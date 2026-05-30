@@ -81,6 +81,135 @@ void RestoreUnlockAll() {
     Log("UnlockAll: restored %d functions", restored);
 }
 
+// ---- Max Level Weapons ----
+// Patches:
+//   get_IsMaxLevel() -> always return true (mov al, 1; ret)
+//   get_Level()      -> jump to get_MaxLevel() so it returns max value
+//   IsAttachmentAvailable() + all weapon-level-gated availability checks
+static const uintptr_t kRVA_IsMaxLevel          = 0x3530D40;
+static const uintptr_t kRVA_GetLevel            = 0x3530DA0;
+static const uintptr_t kRVA_GetMaxLevel         = 0x3530E90;
+
+static const uintptr_t kMaxLevelAvailRVAs[] = {
+    0x3516AB0,  // ArsenalStore::IsAttachmentAvailable(EntityType, EntityType)
+    0x3517500,  // ArsenalStore::IsCamoAvailable(EntityType, EntityType)
+    0x3517610,  // ArsenalStore::IsCamoAvailable(WeaponStoreData&, EntityType)
+    0x3517C50,  // ArsenalStore::IsCamoCategoryAvailable(EntityType, ECamoType)
+    0x3517D60,  // ArsenalStore::IsCamoCategoryAvailable(WeaponStoreData&, ECamoType)
+    0x35183D0,  // ArsenalStore::IsDetailColorAvailable(EntityType, EntityType)
+    0x3518660,  // ArsenalStore::IsDetailColorCategoryAvailable(EntityType, EDetailColorType)
+    0x3518770,  // ArsenalStore::IsDetailColorCategoryAvailable(WeaponStoreData&, EDetailColorType)
+};
+static const int kMaxLevelAvailCount = (int)(sizeof(kMaxLevelAvailRVAs) / sizeof(kMaxLevelAvailRVAs[0]));
+
+static BytePatch s_isMaxLevelPatch = {};
+static BytePatch s_maxLevelAvailPatches[8] = {};
+static uint8_t   s_getLevelOriginal[5] = {};
+static uint8_t*  s_getLevelAddr = nullptr;
+static bool      s_maxLevelActive = false;
+
+bool IsMaxLevelActive() { return s_maxLevelActive; }
+
+void ApplyMaxLevel() {
+    if (s_maxLevelActive) return;
+    HMODULE hProject = GetModuleHandleA("Project.dll");
+    if (!hProject) return;
+
+    uintptr_t base = (uintptr_t)hProject;
+    int patched = 0;
+    uint8_t retTrue[] = { 0xB0, 0x01, 0xC3 }; // mov al, 1; ret
+
+    // Patch get_IsMaxLevel -> mov al, 1; ret
+    {
+        uint8_t* addr = (uint8_t*)(base + kRVA_IsMaxLevel);
+        s_isMaxLevelPatch.addr = addr;
+        s_isMaxLevelPatch.active = false;
+        DWORD oldProtect;
+        if (VirtualProtect(addr, 3, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(s_isMaxLevelPatch.original, addr, 3);
+            memcpy(addr, retTrue, 3);
+            VirtualProtect(addr, 3, oldProtect, &oldProtect);
+            s_isMaxLevelPatch.active = true;
+            patched++;
+        }
+    }
+
+    // Patch get_Level -> jmp get_MaxLevel (relative E9 jump)
+    {
+        s_getLevelAddr = (uint8_t*)(base + kRVA_GetLevel);
+        uint8_t* targetAddr = (uint8_t*)(base + kRVA_GetMaxLevel);
+        int32_t relOffset = (int32_t)(targetAddr - (s_getLevelAddr + 5));
+        DWORD oldProtect;
+        if (VirtualProtect(s_getLevelAddr, 5, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(s_getLevelOriginal, s_getLevelAddr, 5);
+            s_getLevelAddr[0] = 0xE9; // jmp rel32
+            memcpy(s_getLevelAddr + 1, &relOffset, 4);
+            VirtualProtect(s_getLevelAddr, 5, oldProtect, &oldProtect);
+            patched++;
+        }
+    }
+
+    // Patch all weapon-level-gated availability checks -> mov al, 1; ret
+    for (int i = 0; i < kMaxLevelAvailCount; i++) {
+        uint8_t* addr = (uint8_t*)(base + kMaxLevelAvailRVAs[i]);
+        s_maxLevelAvailPatches[i].addr = addr;
+        s_maxLevelAvailPatches[i].active = false;
+        DWORD oldProtect;
+        if (VirtualProtect(addr, 3, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(s_maxLevelAvailPatches[i].original, addr, 3);
+            memcpy(addr, retTrue, 3);
+            VirtualProtect(addr, 3, oldProtect, &oldProtect);
+            s_maxLevelAvailPatches[i].active = true;
+            patched++;
+        }
+    }
+
+    s_maxLevelActive = true;
+    Log("MaxLevel: patched %d/%d functions", patched, 2 + kMaxLevelAvailCount);
+}
+
+void RestoreMaxLevel() {
+    if (!s_maxLevelActive) return;
+    int restored = 0;
+
+    // Restore get_IsMaxLevel
+    if (s_isMaxLevelPatch.active && s_isMaxLevelPatch.addr) {
+        DWORD oldProtect;
+        if (VirtualProtect(s_isMaxLevelPatch.addr, 3, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(s_isMaxLevelPatch.addr, s_isMaxLevelPatch.original, 3);
+            VirtualProtect(s_isMaxLevelPatch.addr, 3, oldProtect, &oldProtect);
+            s_isMaxLevelPatch.active = false;
+            restored++;
+        }
+    }
+
+    // Restore get_Level
+    if (s_getLevelAddr) {
+        DWORD oldProtect;
+        if (VirtualProtect(s_getLevelAddr, 5, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(s_getLevelAddr, s_getLevelOriginal, 5);
+            VirtualProtect(s_getLevelAddr, 5, oldProtect, &oldProtect);
+            s_getLevelAddr = nullptr;
+            restored++;
+        }
+    }
+
+    // Restore all availability patches
+    for (int i = 0; i < kMaxLevelAvailCount; i++) {
+        if (!s_maxLevelAvailPatches[i].active || !s_maxLevelAvailPatches[i].addr) continue;
+        DWORD oldProtect;
+        if (VirtualProtect(s_maxLevelAvailPatches[i].addr, 3, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+            memcpy(s_maxLevelAvailPatches[i].addr, s_maxLevelAvailPatches[i].original, 3);
+            VirtualProtect(s_maxLevelAvailPatches[i].addr, 3, oldProtect, &oldProtect);
+            s_maxLevelAvailPatches[i].active = false;
+            restored++;
+        }
+    }
+
+    s_maxLevelActive = false;
+    Log("MaxLevel: restored %d functions", restored);
+}
+
 void SaveEquippedToCloud() {
     if (!g_state.gameClientStaticFields) {
         snprintf(g_statusMsg, sizeof(g_statusMsg), "ERROR: GameClient not resolved");

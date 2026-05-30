@@ -314,6 +314,24 @@ static void DrawSidebarGlyph(ImDrawList* dl, int glyph, ImVec2 origin, float siz
             dl->AddCircleFilled(ImVec2(cx,       cy), dotR, col);
             dl->AddCircleFilled(ImVec2(cx + gap, cy), dotR, col);
         } break;
+        case GLYPH_EXPLOIT: {
+            // Shield outline with a zigzag crack through the middle
+            float w = r * 0.75f;
+            float h = r;
+            // Shield shape (5-point path)
+            dl->PathClear();
+            dl->PathLineTo(ImVec2(cx - w, cy - h * 0.6f));
+            dl->PathLineTo(ImVec2(cx, cy - h));
+            dl->PathLineTo(ImVec2(cx + w, cy - h * 0.6f));
+            dl->PathLineTo(ImVec2(cx + w * 0.6f, cy + h * 0.5f));
+            dl->PathLineTo(ImVec2(cx, cy + h));
+            dl->PathLineTo(ImVec2(cx - w * 0.6f, cy + h * 0.5f));
+            dl->PathStroke(col, ImDrawFlags_Closed, th);
+            // Zigzag crack
+            dl->AddLine(ImVec2(cx + w * 0.1f, cy - h * 0.6f), ImVec2(cx - w * 0.2f, cy - h * 0.15f), col, th);
+            dl->AddLine(ImVec2(cx - w * 0.2f, cy - h * 0.15f), ImVec2(cx + w * 0.15f, cy + h * 0.15f), col, th);
+            dl->AddLine(ImVec2(cx + w * 0.15f, cy + h * 0.15f), ImVec2(cx - w * 0.1f, cy + h * 0.55f), col, th);
+        } break;
     }
 }
 

@@ -7,4 +7,9 @@
 namespace Combat {
     // myPlayer is the local player's PlayerRoot (validated by caller).
     void ApplyWeaponPatches(void* myPlayer);
+
+    // Byte-patches PlayDamageShakeAnimation to ret. Call once when toggled on.
+    void ApplyNoShake();
+    void RestoreNoShake();
+    bool IsNoShakeActive();
 }

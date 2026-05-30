@@ -9,6 +9,11 @@ namespace Cosmetics {
     void ApplyUnlockAll();
     void RestoreUnlockAll();
 
+    // Max level weapons
+    bool IsMaxLevelActive();
+    void ApplyMaxLevel();
+    void RestoreMaxLevel();
+
     // Persists currently equipped items to PlayFab. Updates the message
     // strings used by the menu.
     void SaveEquippedToCloud();
