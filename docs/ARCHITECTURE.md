@@ -6,7 +6,7 @@ High-level overview of how Cm-Hax works at runtime.
 
 | Output | Source | Role |
 |--------|--------|------|
-| `injector.exe` | `injector/main.cpp` | Polls for `CombatMaster.exe`, elevates privileges, manual-maps a chosen DLL into the target process. No `LoadLibrary`, no PEB/module list entry. |
+| `injector.exe` | `injector/` | ImGui GUI application. Manual-maps a chosen DLL into the target process. Auto-opens Steam, waits for Project.dll, HWID spoof activates before PlayFab login. |
 | `dumper.dll` | `dumper/main.cpp` | Internal IL2CPP metadata dumper. Attaches to the runtime domain, walks all assemblies/classes/fields/methods, writes a C#-style dump to disk. |
 | `cm_hax.dll` | `src/` | The menu DLL. Hooks D3D11 `Present` via VMT swap, renders an ImGui overlay, and drives ESP, aimbot, triggerbot, combat patches, and cosmetic unlocks. |
 
@@ -15,6 +15,7 @@ High-level overview of how Cm-Hax works at runtime.
 | Layer | Implementation | Purpose |
 |-------|---------------|---------|
 | Manual map injection | `injector/main.cpp` | DLL is mapped manually (sections, relocations, imports resolved by shellcode). No module list entry, no `LoadLibrary` call. |
+| HWID spoof | `src/features/exploit.cpp` | Hooks `GetDeviceUniqueIdentifier` on inject (before PlayFab login). Server sees randomized hardware ID. |
 | PE header erasure | `src/utils/stealth.h` | After initialization, the PE headers are zeroed. Memory scanners cannot identify the region as a DLL. |
 | VMT hook | `src/core/hooks.cpp` | `IDXGISwapChain` vtable pointer swap (index 8 + 13). No trampoline bytes to signature (unlike MinHook). |
 | String encryption | `src/utils/xorstr.h` | All IL2CPP class/method names and export symbols are XOR-encrypted at compile time, decrypted on the stack at runtime, and zeroed after use. |
@@ -68,18 +69,19 @@ PlayerRoot.AllPlayers list
 
 ```
 Cm-Hax/
-├── injector/           injector.exe source (manual map + shellcode)
+├── injector/           injector.exe source (ImGui GUI + manual map + shellcode)
 ├── dumper/             dumper.dll source
 ├── src/                cm_hax.dll source
 │   ├── dllmain.cpp
 │   ├── core/           globals, config, hooks (VMT), logging
 │   ├── il2cpp/         IL2CPP runtime: exports, player wrappers, offsets, SDK structs
 │   ├── features/
-│   │   ├── aimbot/     mouse smoothing, hitbox resolver
-│   │   ├── triggerbot/ non-blocking LMB click state machine
+│   │   ├── aimbot/     mouse smoothing, ADS multiplier, target methods (Sticky/Human)
+│   │   ├── triggerbot/ non-blocking LMB click state machine + FOV detection
 │   │   ├── esp.*       data collection thread
-│   │   ├── combat.*    no-recoil / no-spread patcher
-│   │   └── cosmetics.* Is*Available byte patches + cloud save
+│   │   ├── combat.*    no-recoil / no-spread / no-shake patcher
+│   │   ├── cosmetics.* Is*Available byte patches + max level weapons + cloud save
+│   │   └── exploit.*   HWID spoof (ban bypass)
 │   ├── render/         ImGui menu, ESP drawing, overlay
 │   └── utils/          math, memory, strings, input, stealth, xorstr
 ├── third_party/        imgui (fetched by build.bat setup)

@@ -12,13 +12,13 @@ This repo exists as a learning resource for IL2CPP reverse engineering. See the
 
 | Path | Description |
 |------|-------------|
-| `injector/main.cpp` -> `injector.exe` | Waits for `CombatMaster.exe`, raises `SeDebugPrivilege`, manual-maps the DLL into the target process (no `LoadLibrary`, no PEB/module list entry). |
+| `injector/` -> `injector.exe` | ImGui GUI injector. Manual-maps the DLL into the target process (no `LoadLibrary`, no PEB/module list entry). Auto-opens Steam, waits for game + Project.dll, HWID spoof on inject. |
 | `dumper/main.cpp` -> `dumper.dll` | Internal IL2CPP dumper. Walks domain -> assemblies -> images -> classes -> fields/methods and writes a C#-style file. |
-| `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` VMT hook + ImGui overlay). ESP, aimbot, triggerbot, no-recoil, no-spread, cosmetic byte patches. Features compile-time string encryption and PE header erasure for stealth. |
+| `src/` -> `cm_hax.dll` | Modular menu DLL (D3D11 `Present` VMT hook + ImGui overlay). ESP, aimbot, triggerbot, no-recoil, no-spread, cosmetic byte patches, HWID spoof. Features compile-time string encryption and PE header erasure for stealth. |
 | `reference/CombatMaster_SDK_Full.hpp` | Reference SDK header (~4.7 MB). Used as documentation, not compiled by default. |
 | `dumps/` (gitignored) | Runtime output from `dumper.dll`. Re-inject to refresh after a game patch. |
 | `docs/` | Architecture overview and offset-update workflow. |
-| `third_party/imgui` | Vendored dependency for the menu DLL (fetched by `build.bat setup`). |
+| `third_party/imgui` | Vendored dependency for the menu DLL and injector GUI (fetched by `build.bat setup`). |
 
 ## Source layout (`src/`)
 
@@ -37,13 +37,14 @@ src/
     player.{cpp,h}            PlayerData + safe IL2CPP wrappers + bone capture
   features/
     aimbot/
-      aimbot.{cpp,h}          mouse smoothing/stickiness + sticky-lock state
+      aimbot.{cpp,h}          mouse smoothing/stickiness + ADS multiplier + target methods
       hitbox.{cpp,h}          HitboxSpec table + honest resolver (no remap)
     triggerbot/
-      triggerbot.{cpp,h}      non-blocking LMB click state machine
+      triggerbot.{cpp,h}      non-blocking LMB click state machine + FOV detection
     esp.{cpp,h}               60Hz collector thread (PlayerRoot list -> shared)
-    combat.{cpp,h}            no-recoil / no-spread per-frame patcher
-    cosmetics.{cpp,h}         Is*Available byte patches + cloud save
+    combat.{cpp,h}            no-recoil / no-spread / no-shake patcher
+    cosmetics.{cpp,h}         Is*Available byte patches + max level + cloud save
+    exploit.{cpp,h}           HWID spoof (ban bypass)
   render/
     menu_style.{cpp,h}        palette + ImGui style + Segoe UI font loading
     menu_widgets.{cpp,h}      Toggle / Pill / SidebarButton / SectionHeader
@@ -162,20 +163,16 @@ third_party/imgui/         (https://github.com/ocornut/imgui, v1.91.6 tested)
 
 ## Run
 
-Run `build\Release\injector.exe` as Administrator and pick a target:
+Run `build\Release\injector.exe` as Administrator. The GUI window opens with two buttons:
 
-- `1` - menu DLL (`cm_hax.dll`)
-- `2` - dumper DLL (`dumper.dll`)
-- `q` - quit
+- **Load Menu** — injects `cm_hax.dll` (the cheat menu)
+- **Dump Offsets** — injects `dumper.dll` (IL2CPP metadata dumper)
 
-The injector polls for `CombatMaster.exe`, gives the process 3 seconds to
-initialize, then manual-maps the DLL into the target. The DLL does not appear
-in the process module list. Command-line shortcuts:
-
-```bat
-build\Release\injector.exe --menu
-build\Release\injector.exe --dump
-```
+The injector automatically:
+1. Opens Steam if not running (or brings it to foreground)
+2. Waits for `CombatMaster.exe` to launch
+3. Waits for `Project.dll` to load
+4. Injects with HWID spoof active before PlayFab login
 
 In-game keys:
 

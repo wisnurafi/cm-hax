@@ -139,7 +139,20 @@ rem ================================================================
 call :prepare_obj injector
 echo.
 echo [*] Building injector.exe...
-cl %COMMON_FLAGS% "%ROOT%injector\main.cpp" /Fo"%THIS_OBJ_DIR%\\" /Fe"%OUT_DIR%\injector.exe" /link %LINK_FLAGS% advapi32.lib
+cl %COMMON_FLAGS% ^
+    /I"%ROOT%third_party\imgui" ^
+    /I"%ROOT%third_party\imgui\backends" ^
+    "%ROOT%injector\main.cpp" ^
+    "%ROOT%injector\gui.cpp" ^
+    "%ROOT%third_party\imgui\imgui.cpp" ^
+    "%ROOT%third_party\imgui\imgui_draw.cpp" ^
+    "%ROOT%third_party\imgui\imgui_tables.cpp" ^
+    "%ROOT%third_party\imgui\imgui_widgets.cpp" ^
+    "%ROOT%third_party\imgui\backends\imgui_impl_win32.cpp" ^
+    "%ROOT%third_party\imgui\backends\imgui_impl_dx11.cpp" ^
+    /Fo"%THIS_OBJ_DIR%\\" ^
+    /Fe"%OUT_DIR%\injector.exe" ^
+    /link %LINK_FLAGS% /SUBSYSTEM:WINDOWS advapi32.lib shell32.lib user32.lib d3d11.lib dxgi.lib gdi32.lib
 if errorlevel 1 ( echo [!] Failed to build injector.exe & exit /b 1 )
 echo [+] %OUT_DIR%\injector.exe
 exit /b 0
