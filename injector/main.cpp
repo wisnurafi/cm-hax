@@ -13,6 +13,8 @@
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "user32.lib")
 
+#include "gui.h"
+
 // ================================================================
 // Structures
 // ================================================================
@@ -26,12 +28,6 @@ struct ManualMapData {
     pLoadLibraryA fnLoadLibraryA;
     pGetProcAddress fnGetProcAddress;
     pRtlAddFunctionTable fnRtlAddFunctionTable;
-};
-
-struct InjectionTarget {
-    const char* displayName;
-    const char* dllName;
-    const char* successMessage;
 };
 
 // ================================================================
@@ -438,189 +434,7 @@ int ResolveDllPath(const char* dllName, char* dllPath, size_t dllPathSize) {
     return 1;
 }
 
-const InjectionTarget* SelectTargetFromArgs(int argc, char* argv[], const InjectionTarget* menuTarget, const InjectionTarget* dumperTarget) {
-    if (argc <= 1) {
-        return NULL;
-    }
-
-    if (_stricmp(argv[1], "--menu") == 0 || _stricmp(argv[1], "--esp") == 0) {
-        return menuTarget;
-    }
-
-    if (_stricmp(argv[1], "--dump") == 0 || _stricmp(argv[1], "--dumper") == 0) {
-        return dumperTarget;
-    }
-
-    return NULL;
-}
-
-const InjectionTarget* PromptForTarget(const InjectionTarget* menuTarget, const InjectionTarget* dumperTarget) {
-    for (;;) {
-        printf("Choose DLL to inject:\n");
-        printf("  1) Menu  (%s)\n", menuTarget->dllName);
-        printf("  2) Dumper (%s)\n", dumperTarget->dllName);
-        printf("  q) Quit\n\n");
-        printf("> ");
-
-        char input[32] = {};
-        if (!fgets(input, sizeof(input), stdin)) {
-            return NULL;
-        }
-
-        if (input[0] == '1') {
-            return menuTarget;
-        }
-        if (input[0] == '2') {
-            return dumperTarget;
-        }
-        if (input[0] == 'q' || input[0] == 'Q') {
-            return NULL;
-        }
-
-        printf("\n[!] Unknown choice. Please enter 1, 2, or q.\n\n");
-    }
-}
-
-int main(int argc, char* argv[]) {
-    const InjectionTarget menuTarget = {
-        "Menu",
-        "cm_hax.dll",
-        "Menu DLL injected (manual map). No module list entry created."
-    };
-    const InjectionTarget dumperTarget = {
-        "Dumper",
-        "dumper.dll",
-        "Dumper DLL injected (manual map). Check the desktop dumper log/output."
-    };
-
-    printf("============================================================\n");
-    printf("  Combat Master - Stealth Injector (Manual Map)\n");
-    printf("============================================================\n\n");
-
-    const InjectionTarget* target = SelectTargetFromArgs(argc, argv, &menuTarget, &dumperTarget);
-    if (!target) {
-        target = PromptForTarget(&menuTarget, &dumperTarget);
-    }
-
-    if (!target) {
-        printf("\n[*] Exiting.\n");
-        return 0;
-    }
-
-    char dllPath[MAX_PATH];
-    if (!ResolveDllPath(target->dllName, dllPath, sizeof(dllPath))) {
-        printf("[!] Failed to resolve DLL path for %s\n", target->dllName);
-        return 1;
-    }
-
-    // Check DLL exists
-    if (GetFileAttributesA(dllPath) == INVALID_FILE_ATTRIBUTES) {
-        printf("[!] DLL not found: %s\n", dllPath);
-        printf("[!] Make sure %s is in the same folder as injector.exe\n", target->dllName);
-        return 1;
-    }
-
-    printf("[*] Selected: %s\n", target->displayName);
-    printf("[*] DLL path: %s\n", dllPath);
-    if (!EnableDebugPrivilege()) {
-        printf("[!] Could not enable debug privilege. If injection fails, run as Administrator.\n");
-    }
-    printf("\n");
-
-    const char* procName = "CombatMaster.exe";
-
-    // Check if game is already running
-    DWORD pid = FindProcess(procName);
-    if (!pid) {
-        // Make sure Steam is open
-        DWORD steamPid = FindProcess("steam.exe");
-        if (!steamPid) {
-            printf("[*] Opening Steam...\n");
-            char steamPath[MAX_PATH] = {};
-            DWORD steamPathLen = sizeof(steamPath);
-            HKEY hKey = NULL;
-            if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Valve\\Steam", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-                if (RegQueryValueExA(hKey, "SteamExe", NULL, NULL, (LPBYTE)steamPath, &steamPathLen) == ERROR_SUCCESS) {
-                    ShellExecuteA(NULL, "open", steamPath, NULL, NULL, SW_SHOWDEFAULT);
-                }
-                RegCloseKey(hKey);
-            }
-            printf("[*] Waiting for Steam...\n");
-            while (!steamPid) {
-                steamPid = FindProcess("steam.exe");
-                if (!steamPid) Sleep(500);
-            }
-            printf("[+] Steam is ready.\n\n");
-            Sleep(3000);
-        } else {
-            // Steam is running but might be minimized — use steam:// protocol
-            // to force the library window open (this always brings Steam to front)
-            ShellExecuteA(NULL, "open", "steam://open/games/details/2105420", NULL, NULL, SW_SHOWDEFAULT);
-            Sleep(1000);
-        }
-
-        printf("[*] Now press PLAY on Combat Master in Steam.\n");
-        printf("[*] Waiting for %s...\n", procName);
-        printf("[*] HWID spoof activates automatically before login.\n\n");
-
-        while (!pid) {
-            pid = FindProcess(procName);
-            if (!pid) Sleep(100);
-        }
-    } else {
-        printf("[*] %s already running.\n", procName);
-    }
-
-    printf("[+] Found %s (PID: %lu)\n", procName, pid);
-
-    // Wait for Project.dll to be loaded in the target process.
-    // This ensures the game's IL2CPP runtime is mapped before we inject.
-    printf("[*] Waiting for Project.dll to load...\n");
-    {
-        HANDLE hProc = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-        if (!hProc) {
-            // Fallback to fixed wait if we can't open the process yet
-            printf("[*] Can't query process, waiting 5 seconds...\n");
-            Sleep(5000);
-        } else {
-            bool found = false;
-            for (int attempt = 0; attempt < 120; attempt++) { // 60 seconds max
-                HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-                if (snap != INVALID_HANDLE_VALUE) {
-                    MODULEENTRY32 me;
-                    me.dwSize = sizeof(me);
-                    if (Module32First(snap, &me)) {
-                        do {
-                            if (_stricmp(me.szModule, "Project.dll") == 0) {
-                                found = true;
-                                break;
-                            }
-                        } while (Module32Next(snap, &me));
-                    }
-                    CloseHandle(snap);
-                }
-                if (found) break;
-                Sleep(500);
-            }
-            CloseHandle(hProc);
-            if (found) {
-                printf("[+] Project.dll detected! Waiting for initialization...\n");
-                Sleep(3000); // Wait for DLL to fully initialize its exports
-            } else {
-                printf("[!] Timed out waiting for Project.dll (60s). Attempting injection anyway...\n");
-            }
-        }
-    }
-
-    // Inject
-    if (ManualMapInject(pid, dllPath)) {
-        printf("[+] Injection complete!\n");
-        printf("[*] %s\n", target->successMessage);
-        Sleep(1000);
-        return 0;
-    } else {
-        printf("[!] Injection failed!\n");
-        Sleep(3000);
-        return 1;
-    }
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    (void)hInstance; (void)hPrevInstance; (void)lpCmdLine; (void)nCmdShow;
+    return GUI::Run();
 }
