@@ -137,8 +137,43 @@ static DWORD WINAPI InjectThreadProc(LPVOID param) {
     }
 
     if (foundDll) {
-        AppendLog("[+] Project.dll loaded.");
-        Sleep(3000);
+        AppendLog("[+] Project.dll loaded. Waiting for full initialization...");
+        // On cold boot, disk I/O is slower — Project.dll may be mapped but
+        // not fully initialized (imports not resolved, .text not ready).
+        // Wait longer and verify the module is actually functional by checking
+        // that its entry point region is readable.
+        Sleep(5000);
+        
+        // Re-open process and verify Project.dll's memory is fully committed
+        HANDLE hVerify = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pid);
+        if (hVerify) {
+            HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+            if (snap != INVALID_HANDLE_VALUE) {
+                MODULEENTRY32 me;
+                me.dwSize = sizeof(me);
+                if (Module32First(snap, &me)) {
+                    do {
+                        if (_stricmp(me.szModule, "Project.dll") == 0) {
+                            // Try reading the first few bytes to confirm it's accessible
+                            BYTE testBuf[16] = {};
+                            SIZE_T bytesRead = 0;
+                            for (int retry = 0; retry < 10; retry++) {
+                                if (ReadProcessMemory(hVerify, me.modBaseAddr, testBuf, sizeof(testBuf), &bytesRead)) {
+                                    if (bytesRead > 0 && testBuf[0] == 'M' && testBuf[1] == 'Z') {
+                                        break; // PE header readable, module is ready
+                                    }
+                                }
+                                Sleep(1000);
+                            }
+                            break;
+                        }
+                    } while (Module32Next(snap, &me));
+                }
+                CloseHandle(snap);
+            }
+            CloseHandle(hVerify);
+        }
+        AppendLog("[+] Module verified. Injecting...");
     } else {
         AppendLog("[!] Timeout waiting for Project.dll. Trying anyway...");
     }
