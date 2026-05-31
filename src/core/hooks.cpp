@@ -424,8 +424,9 @@ DWORD WINAPI MainThread(LPVOID /*p*/) {
     }
     Log("Project.dll found at %p", hProject);
 
-    // Wait a bit for Project.dll to fully initialize (relocations, etc.)
-    Sleep(2000);
+    // Wait for Project.dll to fully initialize (relocations, imports, .text ready).
+    // On cold boot this can take longer due to disk I/O.
+    Sleep(3000);
 
     // Apply HWID spoof immediately — before IL2CPP resolves and before
     // PlayFab login can query the real device ID. Retry a few times if
