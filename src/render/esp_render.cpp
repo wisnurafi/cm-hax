@@ -232,10 +232,10 @@ void Draw() {
             continue;
         }
 
-        float boxX = minX - 4.0f;
-        float boxY = minY - 4.0f;
-        float boxW = (maxX - minX) + 8.0f;
-        float boxH = (maxY - minY) + 8.0f;
+        float boxX = minX - 2.0f;
+        float boxY = minY - 2.0f;
+        float boxW = (maxX - minX) + 4.0f;
+        float boxH = (maxY - minY) + 4.0f;
         if (boxW < 8.0f || boxH < 12.0f) continue;
 
         ImU32 accentColor = p.visible

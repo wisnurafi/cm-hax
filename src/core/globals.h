@@ -47,6 +47,22 @@ struct CmState {
     bool  noSpread = false;
     bool  noShake  = false;
 
+    // Silent Aim
+    bool  silentAimEnabled = false;
+    float silentAimFov     = 20.0f;  // max correction angle in degrees
+
+    // Magic Bullet
+    bool  magicBulletEnabled = false;
+    float magicBulletFov     = 180.0f; // max angle from crosshair (degrees)
+    float magicBulletMaxDist = 100.0f; // max distance (world units)
+
+    // Rage hitbox (shared by silent aim & magic bullet)
+    int   rageHitboxMask = 1; // HITBOX_HEAD by default
+
+    // Spin
+    bool  spinEnabled = false;
+    float spinSpeed   = 5.0f;  // rotations per second
+
     // Triggerbot. Off-by-default with no key bound, so a fresh install can't
     // fire on its own. The renderer fills triggerCrosshairOnTarget once per
     // frame; the trigger state machine reads it from there.

@@ -275,13 +275,29 @@ static void DrawSidebarGlyph(ImDrawList* dl, int glyph, ImVec2 origin, float siz
             dl->PathStroke(col, ImDrawFlags_Closed, th);
             dl->AddCircleFilled(ImVec2(cx, cy), h * 0.55f, col);
         } break;
-        case GLYPH_AIM: {
+        case GLYPH_LEGIT: {
+            // Crosshair (same as old AIM glyph)
             dl->AddCircle(ImVec2(cx, cy), r,        col, 32, th);
             dl->AddCircle(ImVec2(cx, cy), r * 0.55f, col, 24, th);
             dl->AddLine(ImVec2(cx - r - 1.0f, cy), ImVec2(cx - r * 0.55f + 1.0f, cy), col, th);
             dl->AddLine(ImVec2(cx + r + 1.0f, cy), ImVec2(cx + r * 0.55f - 1.0f, cy), col, th);
             dl->AddLine(ImVec2(cx, cy - r - 1.0f), ImVec2(cx, cy - r * 0.55f + 1.0f), col, th);
             dl->AddLine(ImVec2(cx, cy + r + 1.0f), ImVec2(cx, cy + r * 0.55f - 1.0f), col, th);
+        } break;
+        case GLYPH_RAGE: {
+            // Skull-like: circle head + X eyes + teeth line
+            dl->AddCircle(ImVec2(cx, cy - r * 0.15f), r * 0.85f, col, 24, th);
+            float ex = r * 0.28f, ey = r * 0.22f;
+            // Left X eye
+            dl->AddLine(ImVec2(cx - ex - ey, cy - r * 0.25f - ey), ImVec2(cx - ex + ey, cy - r * 0.25f + ey), col, th);
+            dl->AddLine(ImVec2(cx - ex + ey, cy - r * 0.25f - ey), ImVec2(cx - ex - ey, cy - r * 0.25f + ey), col, th);
+            // Right X eye
+            dl->AddLine(ImVec2(cx + ex - ey, cy - r * 0.25f - ey), ImVec2(cx + ex + ey, cy - r * 0.25f + ey), col, th);
+            dl->AddLine(ImVec2(cx + ex + ey, cy - r * 0.25f - ey), ImVec2(cx + ex - ey, cy - r * 0.25f + ey), col, th);
+            // Teeth
+            dl->AddLine(ImVec2(cx - r * 0.4f, cy + r * 0.35f), ImVec2(cx + r * 0.4f, cy + r * 0.35f), col, th);
+            dl->AddLine(ImVec2(cx - r * 0.15f, cy + r * 0.35f), ImVec2(cx - r * 0.15f, cy + r * 0.55f), col, th);
+            dl->AddLine(ImVec2(cx + r * 0.15f, cy + r * 0.35f), ImVec2(cx + r * 0.15f, cy + r * 0.55f), col, th);
         } break;
         case GLYPH_COMBAT: {
             float w = r * 0.85f;

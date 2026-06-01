@@ -58,6 +58,14 @@ static CfgEntry g_entries[] = {
     { "combat.noRecoil",   CFG_BOOL,  &g_state.noRecoil },
     { "combat.noSpread",   CFG_BOOL,  &g_state.noSpread },
     { "combat.noShake",    CFG_BOOL,  &g_state.noShake },
+    { "combat.silentAim",  CFG_BOOL,  &g_state.silentAimEnabled },
+    { "combat.silentAimFov", CFG_FLOAT, &g_state.silentAimFov },
+    { "combat.magicBullet", CFG_BOOL, &g_state.magicBulletEnabled },
+    { "combat.magicBulletFov", CFG_FLOAT, &g_state.magicBulletFov },
+    { "combat.magicBulletMaxDist", CFG_FLOAT, &g_state.magicBulletMaxDist },
+    { "combat.rageHitboxMask", CFG_INT, &g_state.rageHitboxMask },
+    { "combat.spin", CFG_BOOL, &g_state.spinEnabled },
+    { "combat.spinSpeed", CFG_FLOAT, &g_state.spinSpeed },
 
     // Triggerbot
     { "trigger.enabled",          CFG_BOOL,  &g_state.triggerEnabled },
@@ -332,7 +340,7 @@ void Load() {
     if (g_state.adsMultiplier > 5.0f) g_state.adsMultiplier = 5.0f;
     if (g_state.aimbotFov    < 25.0f) g_state.aimbotFov = 25.0f;
     if (g_state.aimbotFov    > 600.0f) g_state.aimbotFov = 600.0f;
-    if (g_state.activeTab < 0 || g_state.activeTab > 4) g_state.activeTab = 0;
+    if (g_state.activeTab < 0 || g_state.activeTab > 5) g_state.activeTab = 0;
     if (g_state.aimActivationMode < 0 || g_state.aimActivationMode > 1) g_state.aimActivationMode = 1;
     if (g_state.aimActivationKey  < 0 || g_state.aimActivationKey  > 255) g_state.aimActivationKey = 0;
     if (g_state.aimTargetMethod < 0 || g_state.aimTargetMethod > 1) g_state.aimTargetMethod = 0;

@@ -24,7 +24,8 @@ namespace Widgets {
     // Sidebar entry. Animated accent stripe + glyph + label. Returns true on click.
     enum SidebarGlyph {
         GLYPH_ESP = 0,
-        GLYPH_AIM,
+        GLYPH_LEGIT,
+        GLYPH_RAGE,
         GLYPH_COMBAT,
         GLYPH_COSMETICS,
         GLYPH_EXPLOIT,
