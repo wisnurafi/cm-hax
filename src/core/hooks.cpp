@@ -24,6 +24,8 @@
 #include "../features/cosmetics.h"
 #include "../features/combat.h"
 #include "../features/exploit.h"
+#include "../features/silentaim.h"
+#include "../features/magicbullet.h"
 #include "../utils/stealth.h"
 
 #include "../render/menu.h"
@@ -89,6 +91,9 @@ static void CleanupResources() {
     g_state.noRecoil   = false;
     g_state.noSpread   = false;
     g_state.noShake    = false;
+    g_state.silentAimEnabled = false;
+    SilentAim::Shutdown();
+    MagicBullet::Shutdown();
     Cosmetics::RestoreUnlockAll();
     Cosmetics::RestoreMaxLevel();
     Combat::RestoreNoShake();
@@ -457,6 +462,20 @@ DWORD WINAPI MainThread(LPVOID /*p*/) {
     }
     if (!g_state.gameClientStaticFields) {
         Log("GameClient static fields not yet resolved at startup; will retry from data thread");
+    }
+
+    // 3.5. Silent Aim hook
+    if (SilentAim::Init()) {
+        Log("SilentAim initialized");
+    } else {
+        Log("SilentAim init failed (will not be available)");
+    }
+
+    // 3.6. Magic Bullet hook
+    if (MagicBullet::Init()) {
+        Log("MagicBullet initialized");
+    } else {
+        Log("MagicBullet init failed (will not be available)");
     }
 
     // 4. D3D11 hook

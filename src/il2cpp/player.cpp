@@ -170,7 +170,7 @@ static void AddHitboxBounds(PlayerData& p, void* hitbox) {
         }
 
         Vector3 half = { fabsf(size.x) * 0.5f, fabsf(size.y) * 0.5f, fabsf(size.z) * 0.5f };
-        if (half.x > 1.5f || half.y > 1.5f || half.z > 1.5f) return;
+        if (half.x > 0.6f || half.y > 0.6f || half.z > 0.6f) return;
 
         Vector3 c = { base.x + center.x, base.y + center.y, base.z + center.z };
         for (int ix = -1; ix <= 1; ix += 2) {

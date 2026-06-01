@@ -5,7 +5,8 @@
 namespace Menu {
     enum Tab {
         TAB_ESP = 0,
-        TAB_AIM,
+        TAB_LEGIT,
+        TAB_RAGE,
         TAB_COMBAT,
         TAB_COSMETICS,
         TAB_EXPLOIT,

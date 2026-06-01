@@ -188,6 +188,9 @@ cl %COMMON_FLAGS% /LD ^
     "%ROOT%src\features\cosmetics.cpp" ^
     "%ROOT%src\features\exploit.cpp" ^
     "%ROOT%src\features\movement.cpp" ^
+    "%ROOT%src\features\silentaim.cpp" ^
+    "%ROOT%src\features\magicbullet.cpp" ^
+    "%ROOT%src\features\spin.cpp" ^
     "%ROOT%src\render\menu.cpp" ^
     "%ROOT%src\render\menu_style.cpp" ^
     "%ROOT%src\render\menu_widgets.cpp" ^

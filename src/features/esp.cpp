@@ -9,6 +9,8 @@
 #include "esp.h"
 #include "combat.h"
 #include "movement.h"
+#include "silentaim.h"
+#include "spin.h"
 #include "../core/globals.h"
 #include "../core/hooks.h"
 #include "../core/logging.h"
@@ -77,6 +79,8 @@ DWORD WINAPI DataThread(LPVOID /*lpReserved*/) {
 
         Combat::ApplyWeaponPatches(myPlayer);
         Movement::ApplyMovementPatches(myPlayer);
+        SilentAim::PollRestore();
+        Spin::Tick(myPlayer);
 
         void* camera = NULL;
         __try {

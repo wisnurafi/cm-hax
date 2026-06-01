@@ -20,6 +20,7 @@
 #include "../features/cosmetics.h"
 #include "../features/combat.h"
 #include "../features/exploit.h"
+#include "../features/aimbot/hitbox.h"
 #include "../utils/math.h"
 #include "../utils/input.h"
 
@@ -38,7 +39,8 @@ struct TabSpec {
 
 static const TabSpec g_tabs[TAB_COUNT] = {
     { "Visuals",   "ESP & arrows",  Widgets::GLYPH_ESP },
-    { "Aim",       "Targeting",     Widgets::GLYPH_AIM },
+    { "Legit",     "Aim & trigger", Widgets::GLYPH_LEGIT },
+    { "Rage",      "Silent aim",    Widgets::GLYPH_RAGE },
     { "Combat",    "Recoil/spread", Widgets::GLYPH_COMBAT },
     { "Cosmetics", "Unlocks/save",  Widgets::GLYPH_COSMETICS },
     { "Exploit",   "Bypasses",      Widgets::GLYPH_EXPLOIT },
@@ -332,6 +334,76 @@ static void RenderTabAim() {
     ImGui::PopStyleColor();
 }
 
+static void RenderTabRage() {
+    Widgets::SectionHeader("Silent Aim");
+    Widgets::Toggle("Enable Silent Aim", &g_state.silentAimEnabled);
+    if (g_state.silentAimEnabled) {
+        ImGui::SameLine(0.0f, 12.0f);
+        Widgets::HeaderPill("ACTIVE", kSuccess);
+    }
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kMutedText, "Corrects aim to nearest enemy within FOV cone.");
+    ImGui::PopFont();
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    Widgets::SectionHeader("Hitbox (Rage)");
+    {
+        static const Widgets::PillItem hitboxItems[] = {
+            { HITBOX_HEAD,    "Head" },
+            { HITBOX_CHEST,   "Chest" },
+            { HITBOX_STOMACH, "Stomach" },
+            { HITBOX_LEGS,    "Legs" },
+        };
+        Widgets::PillBitmaskRow("##rage_hitbox", &g_state.rageHitboxMask, hitboxItems, 4);
+    }
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kMutedText, "Shared by Silent Aim & Magic Bullet.");
+    ImGui::PopFont();
+
+    ImGui::Dummy(ImVec2(0.0f, 12.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, kWarning);
+    ImGui::TextWrapped("Warning: This is a rage feature. Use at your own risk in public matches.");
+    ImGui::PopStyleColor();
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    Widgets::SectionHeader("Magic Bullet");
+    Widgets::Toggle("Enable Magic Bullet", &g_state.magicBulletEnabled);
+    if (g_state.magicBulletEnabled) {
+        ImGui::SameLine(0.0f, 12.0f);
+        Widgets::HeaderPill("ACTIVE", kSuccess);
+    }
+
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##mb_fov", &g_state.magicBulletFov, 10.0f, 180.0f, "FOV: %.0f deg");
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##mb_dist", &g_state.magicBulletMaxDist, 10.0f, 200.0f, "Max Dist: %.0f");
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kMutedText, "Shifts shot origin so your current look direction");
+    ImGui::TextColored(kMutedText, "passes through the nearest enemy. No angle change.");
+    ImGui::TextColored(kMutedText, "Overrides Silent Aim when both are enabled.");
+    ImGui::PopFont();
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    Widgets::SectionHeader("Spin");
+    Widgets::Toggle("Enable Spin", &g_state.spinEnabled);
+    if (g_state.spinEnabled) {
+        ImGui::SameLine(0.0f, 12.0f);
+        Widgets::HeaderPill("ACTIVE", kSuccess);
+    }
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::SliderFloat("##spin_speed", &g_state.spinSpeed, 1.0f, 20.0f, "Speed: %.1f rot/s");
+
+    ImGui::Dummy(ImVec2(0.0f, 6.0f));
+    ImGui::PushFont(g_fontSmall);
+    ImGui::TextColored(kMutedText, "Spins your third-person model. Other players see");
+    ImGui::TextColored(kMutedText, "you spinning. Your local view is unaffected.");
+    ImGui::PopFont();
+}
+
 static void RenderTabCombat() {
     Widgets::SectionHeader("Weapon");
     Widgets::Toggle("No Recoil", &g_state.noRecoil);
@@ -541,7 +613,8 @@ static void RenderTabMisc() {
 static void RenderActiveTab() {
     switch (g_state.activeTab) {
         case TAB_ESP:        RenderTabESP();        break;
-        case TAB_AIM:        RenderTabAim();        break;
+        case TAB_LEGIT:      RenderTabAim();        break;
+        case TAB_RAGE:       RenderTabRage();       break;
         case TAB_COMBAT:     RenderTabCombat();     break;
         case TAB_COSMETICS:  RenderTabCosmetics();  break;
         case TAB_EXPLOIT:    RenderTabExploit();    break;
