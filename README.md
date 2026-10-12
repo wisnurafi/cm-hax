@@ -230,3 +230,13 @@ Inc. or the Combat Master developers.
 
 If you use any of this, do it on isolated test accounts, against offline /
 private builds, or for static analysis only.
+
+## Project docs
+
+- `docs/ARCHITECTURE.md` — how the code is organized
+- `docs/OFFSETS.md` — offset-update workflow after game patches
+- `SECURITY.md` — how to report vulnerabilities
+
+## License
+
+MIT — see [LICENSE](LICENSE).
